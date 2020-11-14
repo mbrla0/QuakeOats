@@ -1,16 +1,17 @@
 #pragma once
 
-#include <atomic>
-#include <condition_variable>
-#include <cstdint>
-#include <deque>
-#include <functional>
-#include <future>
-#include <map>
-#include <mutex>
-#include <optional>
-#include <thread>
-#include <vector>
+#include <atomic>               //std::atomic, std::memory_order_*
+#include <condition_variable>   //std::condition_variable
+#include <cstdint>              //std::uint32_t
+#include <deque>                //std::deque
+#include <functional>           //std::function
+#include <future>               //std::future, std::packaged_task
+#include <map>                  //std::map
+#include <memory>               //std::unique_ptr, std::make_unique
+#include <mutex>                //std::mutex
+#include <optional>             //std::optional
+#include <thread>               //std::thread
+#include <vector>               //std::vector
 
 class semaphore {
 private:
@@ -126,24 +127,16 @@ class thread_pool_worker {
 private:
     friend class thread_pool;
 
-    std::uint32_t id;
+    const std::uint32_t id;
     work_queue<WorkerTask> external_tasks;
     std::deque<WorkerTask> local_tasks;
     std::thread thr;
     std::promise<std::thread::id> thread_id_promise;
 
-    explicit thread_pool_worker(std::uint32_t _id): id(_id) {}
     //prevent copying
     thread_pool_worker(const thread_pool_worker&) = delete;
     thread_pool_worker& operator=(const thread_pool_worker&) = delete;
-    
-    void start() {
-        thr = std::thread(&thread_pool_worker::run, this);
-    }
-    void queue_stop() {
-        queue_task({});
-    }
-
+ 
     void run() {
         thread_id_promise.set_value(std::this_thread::get_id());
         while(1) {
@@ -176,13 +169,22 @@ private:
     void queue_task(WorkerTask&& t) {
         external_tasks.enqueue(std::move(t));
     }
+public:
+    explicit thread_pool_worker(std::uint32_t _id): id(_id) {
+        thr = std::thread(&thread_pool_worker::run, this);
+    }
+
+    ~thread_pool_worker() {
+        queue_task({});
+        thr.join();
+    }
 };
 
 class thread_pool {
 private:
     std::uint32_t worker_count;
     std::atomic<std::uint32_t> next_worker;
-    std::vector<thread_pool_worker*> workers;
+    std::vector<std::unique_ptr<thread_pool_worker>> workers;
     std::map<std::thread::id, std::uint32_t> worker_ids;
 
     //prevent copying
@@ -206,25 +208,13 @@ public:
         next_worker.store(0);
         workers.reserve(size);
         for(std::uint32_t i = 0; i < size; i++) {
-            auto w = new thread_pool_worker(i);
-            workers.push_back(w);
-            w->start();
+            workers.push_back(std::make_unique<thread_pool_worker>(i));
         }
         for(std::uint32_t i = 0; i < size; i++) {
             auto future = workers[i]->thread_id_promise.get_future();
             future.wait();
             const auto id = future.get();
             worker_ids.insert({id, i});
-        }
-    }
-
-    ~thread_pool() {
-        for(auto& w : workers) {
-            w->queue_stop();
-        }
-        for(auto& w : workers) {
-            w->thr.join();
-            delete w;
         }
     }
 
