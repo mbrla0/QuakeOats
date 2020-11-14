@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <condition_variable>
 #include <cstdint>
 #include <functional>
@@ -128,10 +129,17 @@ public:
 
 class thread_pool {
 private:
+    std::uint32_t worker_count;
+    std::atomic<std::uint32_t> next_worker;
     std::vector<thread_pool_worker*> workers;
     std::map<std::thread::id, std::uint32_t> worker_ids;
+
+    std::uint32_t get_next_worker() {
+        auto id = next_worker.fetch_add(1, std::memory_order_acq_rel) % worker_count;
+        return id;
+    }
 public:
-    explicit thread_pool(std::uint32_t size) {
+    explicit thread_pool(std::uint32_t size): worker_count(size) {
         workers.reserve(size);
         for(std::uint32_t i = 0; i < size; i++) {
             auto w = new thread_pool_worker(i);
@@ -165,8 +173,9 @@ public:
                 t(id);
                 return true;
             });
+            return;
         }
-        submit_task_for(0, t);
+        submit_task_for(get_next_worker(), t);
     }
 
     std::optional<std::uint32_t> current_tid() const noexcept {
