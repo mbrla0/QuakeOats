@@ -55,7 +55,7 @@ public:
 
     void enqueue(T t) noexcept {
         std::lock_guard<std::mutex> l(lock);
-        q.push(t);
+        q.push(std::move(t));
         cond.notify_one();
     }
 
@@ -64,7 +64,7 @@ public:
         while(q.empty()) {
             cond.wait(l);
         }
-        auto r = q.front();
+        auto r = std::move(q.front());
         q.pop();
         return r;
     }
@@ -74,14 +74,15 @@ public:
         if(q.empty()) {
             return false;
         }
-        ref = q.front();
+        ref = std::move(q.front());
         q.pop();
         return true;
     }
 };
 
-using WorkerTask = std::function<bool(std::uint32_t)>;
-using Task = std::function<void(std::uint32_t)>;
+using WorkerTask = std::packaged_task<void(std::uint32_t)>;
+template<typename T>
+using Task = std::function<T(std::uint32_t)>;
 
 class thread_pool;
 class thread_pool_worker {
@@ -97,19 +98,20 @@ private:
         thr = std::thread(&thread_pool_worker::run, this);
     }
     void queue_stop() {
-        queue_task([](std::uint32_t _ignored) { return false; });
+        queue_task({});
     }
 
     void run() {
         thread_id_promise.set_value(std::this_thread::get_id());
         while(1) {
             auto t = get_next_task();
-            if(!t(id)) break;
+            if(!t.valid()) break;
+            t(id);
         }
     }
     WorkerTask get_next_task() {
         if(!local_tasks.empty()) {
-            auto t = local_tasks.front();
+            auto t = std::move(local_tasks.front());
             local_tasks.pop();
             return t;
         }
@@ -117,13 +119,13 @@ private:
     }
 
     void queue_local_task(WorkerTask t) {
-        local_tasks.push(t);
+        local_tasks.push(std::move(t));
     }
 public:
     explicit thread_pool_worker(std::uint32_t _id): id(_id) {}
 
     void queue_task(WorkerTask t) {
-        external_tasks.enqueue(t);
+        external_tasks.enqueue(std::move(t));
     }
 };
 
@@ -163,19 +165,23 @@ public:
         }
     }
 
-    void submit_task_for(std::uint32_t tid, Task t) {
-        workers[tid]->queue_task([t](std::uint32_t id) { t(id); return true; });
+    template<typename T>
+    std::future<T> submit_task_for(std::uint32_t tid, Task<T> t) {
+        auto p = std::packaged_task<T(std::uint32_t)>(t);
+        auto f = p.get_future();
+        workers[tid]->queue_task(std::packaged_task<void(std::uint32_t)>(std::move(p)));
+        return f;
     }
 
-    void submit_task(Task t) {
+    template<typename T>
+    std::future<T> submit_task(Task<T> t) {
         if(auto tid = current_tid()) {
-            workers[*tid]->queue_local_task([t](std::uint32_t id) {
-                t(id);
-                return true;
-            });
-            return;
+            auto p = std::packaged_task<T(std::uint32_t)>(t);
+            auto f = p.get_future();
+            workers[*tid]->queue_local_task(std::packaged_task<void(std::uint32_t)>(std::move(p)));
+            return f;
         }
-        submit_task_for(get_next_worker(), t);
+        return submit_task_for<T>(get_next_worker(), t);
     }
 
     std::optional<std::uint32_t> current_tid() const noexcept {
