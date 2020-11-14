@@ -142,6 +142,7 @@ private:
     }
 public:
     explicit thread_pool(std::uint32_t size): worker_count(size) {
+        next_worker.store(0);
         workers.reserve(size);
         for(std::uint32_t i = 0; i < size; i++) {
             auto w = new thread_pool_worker(i);
