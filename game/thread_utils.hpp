@@ -123,6 +123,18 @@ using WorkerTask = std::packaged_task<void(std::uint32_t)>;
 template<typename T>
 using Task = std::function<T(std::uint32_t)>;
 
+/**
+ * Creates a task from a function which takes no arguments, ignoring the
+ * provided thread id.
+ */
+template<typename T>
+Task<T> make_task(std::function<T()> f) {
+    return [f](std::uint32_t id) {
+        (void)id;
+        return f();
+    };
+}
+
 class thread_pool;
 class thread_pool_worker {
 private:

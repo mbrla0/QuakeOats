@@ -32,6 +32,10 @@ int main() {
             locked_print(std::cout, "Now running in thread ", id2, " (should be ", id, ")\n");
         });
     });
+    //if you don't care about the thread id, use make_task
+    p.submit_task(make_task<void>([]() {
+        locked_print(std::cout, "Running inside the pool but without caring about the thread id\n");
+    }));
     {
         //submitting a task returns a future to read it's result
         auto f = p.submit_task<int>([](std::uint32_t id2) {
@@ -46,11 +50,10 @@ int main() {
         //all tasks are queued, so they actually run in parallel.
         auto begin = std::chrono::steady_clock::now();
         for(auto i = 0u; i < p.size(); i++) {
-            v.push_back(p.submit_task<int>([i](std::uint32_t id) {
-                (void)id;
+            v.push_back(p.submit_task(make_task<int>([i]() {
                 sleepms(1000);
                 return i;
-            }));
+            })));
         }
         for(auto& f : v) {
             locked_print(std::cout, "Sleep future result = ", f.get(), "\n");
@@ -66,11 +69,11 @@ int main() {
     {
         //equivalent to the previous example
         auto begin = std::chrono::steady_clock::now();
-        auto v = p.submit_all<int>({
-                [](std::uint32_t id) { (void)id; sleepms(1000); return 0; },
-                [](std::uint32_t id) { (void)id; sleepms(1000); return 1; },
-                [](std::uint32_t id) { (void)id; sleepms(1000); return 2; },
-                [](std::uint32_t id) { (void)id; sleepms(1000); return 3; },
+        auto v = p.submit_all({
+                make_task<int>([]() { sleepms(1000); return 0; }),
+                make_task<int>([]() { sleepms(1000); return 1; }),
+                make_task<int>([]() { sleepms(1000); return 2; }),
+                make_task<int>([]() { sleepms(1000); return 3; })
         });
         for(auto& f : v) {
             locked_print(std::cout, "Sleep future result (pt2) = ", f.get(), "\n");
