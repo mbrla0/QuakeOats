@@ -67,7 +67,7 @@ int main() {
         }
     }
     {
-        //equivalent to the previous example
+        //equivalent to the previous example (assuming 4 core machine)
         auto begin = std::chrono::steady_clock::now();
         auto v = p.submit_all({
                 make_task<int>([]() { sleepms(1000); return 0; }),
