@@ -219,6 +219,30 @@ public:
     }
 
     /**
+     * Returns the default concurrency for a thread pool. This is the current
+     * system's hardware concurrency, defaulting to 4 if that can't be read.
+     */
+    static std::uint32_t default_concurrency() noexcept {
+        auto size = std::thread::hardware_concurrency();
+        if(size < 1) {
+            size = 4;
+        }
+        return size;
+    }
+
+    /**
+     * Creates a new thread pool with the default concurrency.
+     */
+    static thread_pool create() noexcept {
+        return thread_pool(default_concurrency());
+    }
+
+    /**
+     * Returns the number of threads in this pool.
+     */
+    std::uint32_t size() const noexcept { return worker_count; }
+
+    /**
      * Submits a task to a given thread. The provided thread number must be
      * in the range [0, thread_count).
      */
