@@ -8,9 +8,10 @@ template<typename... Args>
 void locked_print(std::ostream& s, Args&&... args) {
     std::unique_lock<std::mutex> lock(io_mutex);
     (s << ... << args);
+    s.flush();
 }
 
-void sleepmp(int ms) {
+void sleepms(int ms) {
     std::this_thread::sleep_for(std::chrono::milliseconds(ms));
 }
 
@@ -47,12 +48,32 @@ int main() {
         for(auto i = 0u; i < p.size(); i++) {
             v.push_back(p.submit_task<int>([i](std::uint32_t id) {
                 (void)id;
-                sleepmp(1000);
+                sleepms(1000);
                 return i;
             }));
         }
         for(auto& f : v) {
             locked_print(std::cout, "Sleep future result = ", f.get(), "\n");
+        }
+        auto end = std::chrono::steady_clock::now();
+        auto time = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
+        locked_print(std::cout, "Time elapsed = ", time, "ms\n");
+        if(time > 1500) {
+            locked_print(std::cerr, "Took too long!\n");
+            return 1;
+        }
+    }
+    {
+        //equivalent to the previous example
+        auto begin = std::chrono::steady_clock::now();
+        auto v = p.submit_all<int>({
+                [](std::uint32_t id) { (void)id; sleepms(1000); return 0; },
+                [](std::uint32_t id) { (void)id; sleepms(1000); return 1; },
+                [](std::uint32_t id) { (void)id; sleepms(1000); return 2; },
+                [](std::uint32_t id) { (void)id; sleepms(1000); return 3; },
+        });
+        for(auto& f : v) {
+            locked_print(std::cout, "Sleep future result (pt2) = ", f.get(), "\n");
         }
         auto end = std::chrono::steady_clock::now();
         auto time = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();

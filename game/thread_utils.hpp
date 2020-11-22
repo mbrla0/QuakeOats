@@ -6,6 +6,7 @@
 #include <deque>                //std::deque
 #include <functional>           //std::function
 #include <future>               //std::future, std::packaged_task
+#include <initializer_list>     //std::initializer_list
 #include <map>                  //std::map
 #include <memory>               //std::unique_ptr, std::make_unique
 #include <mutex>                //std::mutex
@@ -273,6 +274,33 @@ public:
             }
         }
         return submit_task_for<T>(get_next_worker(), t);
+    }
+
+    /**
+     * Convenience method to submit multiple tasks to the pool, spreading them through all
+     * workers.
+     */
+    template<typename T>
+    std::vector<std::future<T>> submit_all(std::initializer_list<Task<T>> tasks) noexcept {
+        std::vector<std::future<T>> res;
+        res.reserve(tasks.size());
+        //if inside a pool, optimize by adding to the local queue if possible,
+        //also starting in the current thread to bias towards the local queue
+        //to avoid synchronization overhead (assuming a pool of 4 threads, this
+        //would mean the current thread gets 2 tasks if 5 are given to this method)
+        if(auto id = current_tid()) {
+            std::uint32_t current = *id;
+            std::uint32_t thread = current;
+            for(auto t : tasks) {
+                res.emplace_back(submit_task(t, thread == current));
+                thread = (thread + 1) % size();
+            }
+        } else {
+            for(auto t : tasks) {
+                res.emplace_back(submit_task(t, false));
+            }
+        }
+        return res;
     }
 
     /**
