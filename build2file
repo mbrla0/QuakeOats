@@ -1,0 +1,4 @@
+using cxx
+
+exe{game}: cxx{src/**}
+

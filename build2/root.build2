@@ -1,0 +1,5 @@
+cxx.std = c++2a
+using cxx
+
+cxx{*}: extension = cc
+
