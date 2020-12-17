@@ -1,0 +1,4 @@
+: 1
+name: QuakeOats
+version: 0.1.0
+summary: Quake-like rendered on the CPU
