@@ -5,19 +5,15 @@ CXXFLAGS=-std=c++2a -stdlib=libc++ -fimplicit-modules -fimplicit-module-maps \
 LD=clang++
 LFLAGS=-fsanitize=address -O2 -g
 
-LIBS=`pkg-config --libs sfml-all` -lpthread
-OBJS=src/main.o src/game.pcm src/gfx.pcm src/str.pcm
+LIBS=$(shell pkg-config --libs sfml-all) -lpthread
+OBJS=src/main.o
 QuakeOats: Makefile $(OBJS)
 	$(LD) $(LFLAGS) -o $@ $(OBJS) $(LIBS)
 
-src/main.o: src/main.cc src/game.pcm src/gfx.pcm src/str.pcm
+src/main.o: src/main.cc src/game.hpp src/gfx.hpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
-src/game.pcm: src/game.cc src/gfx.pcm
-	$(CXX) $(CXXFLAGS) -c $< -Xclang -emit-module-interface -o $@ 
-src/gfx.pcm: src/gfx.cc src/str.pcm
-	$(CXX) $(CXXFLAGS) -c $< -Xclang -emit-module-interface -o $@
-src/str.pcm: src/str.cc
-	$(CXX) $(CXXFLAGS) -c $< -Xclang -emit-module-interface -o $@
+
+all: QuakeOats
 
 .PHONY: clean
 clean:

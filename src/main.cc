@@ -2,10 +2,13 @@
 #include <SFML/Window.hpp>		/* For Window functionality.	*/
 #include <SFML/Graphics.hpp>	/* For showing what we draw.	*/
 
-import <iostream>;
-import gfx;		/* For graphics functions.	*/
-import game;	/* For the game.			*/
-import str;		/* Haha UTF-8 go brr.		*/
+//import <iostream>;
+//import gfx;		/* For graphics functions.	*/
+//import game;	/* For the game.			*/
+//import str;		/* Haha UTF-8 go brr.		*/
+#include <iostream>
+#include "gfx.hpp"
+#include "game.hpp"
 
 /* Use 32-bit RGBA as our pixel format. */
 using Pixel = gfx::PixelRgba32;
