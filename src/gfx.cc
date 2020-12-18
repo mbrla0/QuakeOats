@@ -1,24 +1,28 @@
 /* gfx.cc - The rasterizer. This module provides access to a triangle
  * renderer with a multi-stage pipeline and other graphics utilities. */
+module;
+#include "thread_utils.hpp"	/* Thanks Natan. */
 
 export module gfx;
 
-import "thread_utils.hpp";	/* Thanks Natan. 					*/
-import <string>;			/* For standard string types.		*/
-import <format>;			/* For sane string formatting.		*/
-import <cstdint>;			/* For standard integer types.		*/
-import <stdexcept>;			/* For standard exception types.	*/
+import <string>;	/* For standard string types.		*/
+import <sstream>;	/* AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.	*/
+import <cstdint>;	/* For standard integer types.		*/
+import <stdexcept>;	/* For standard exception types.	*/
+import <concepts>;	/* For standard concepts.			*/
+import str;			/* Haha UTF-8 go brr.				*/
 
-namespace gfx;
+export namespace gfx
 {
 	/** RGBA 32 color values. */
-	alignas(4) struct PixelRgba32
+	struct alignas(4) PixelRgba32
 	{
 		uint8_t red;
 		uint8_t green;
 		uint8_t blue;
 		uint8_t alpha;
-		Pixel()
+
+		PixelRgba32()
 		{
 			this->red   = 0;
 			this->green = 0;
@@ -44,10 +48,13 @@ namespace gfx;
 		{
 			if(x >= this->_width || y >= this->_height)
 			{
-				auto what = std::format(
-					u8"Could not access pixel at ({}, {}), expected < ({}, {})"
-					x, y, this->_width, this->_height);
-				throw std::range_error(what);
+				std::stringstream what;
+				what << u8"Could not access pixel at ";
+				what << u8"(" << x << u8", " << y << u8")";
+				what << u8", expected < ";
+				what << u8"(" << _width << u8", " << _height << u8")";
+
+				throw std::range_error(what.str());
 			}
 		}
 	public:
@@ -64,7 +71,7 @@ namespace gfx;
 		Plane(uint32_t width, uint32_t height)
 			: _width(width), _height(height)
 		{
-			this->_data = new[] T[width * height];
+			this->_data = new T[width * height];
 		}
 
 		~Plane()
@@ -108,7 +115,7 @@ namespace gfx;
 		const T& at(uint32_t x, uint32_t y) const
 		{
 			this->_check_bounds(x, y);
-			return this->at_unchecked(x, y);
+			return this->_data[y * this->_width + x];
 		}
 		
 		/* Acquire a reference to a data point in the plane at the given x and y
@@ -121,7 +128,7 @@ namespace gfx;
 		T& at(uint32_t x, uint32_t y)
 		{
 			this->_check_bounds(x, y);
-			return this->at_unchecked(x, y);
+			return this->_data[y * this->_width + x];
 		}
 
 		/* Clears the buffer with a given data value. */
@@ -129,7 +136,7 @@ namespace gfx;
 		{
 			for(uint32_t i = 0; i < this->_height; ++i)
 				for(uint32_t j = 0; j < this->_width; ++j)
-					this->at_unchecked(j, i) = clear;
+					this->_data[i * this->_width + j] = clear;
 		}
 
 		/* Gets the width of this plane. */
@@ -160,9 +167,9 @@ namespace gfx;
 	template<typename T, typename P>
 	concept Slope = requires(T slope, double dPos, float fPos)
 	{
-		{ slope.at(dPos) } -> P;
-		{ slope.at(fPos) } -> P;
-	}
+		{ slope.at(dPos) } -> std::same_as<P>;
+		{ slope.at(fPos) } -> std::same_as<P>;
+	};
 
 	template<typename P, typename S>
 		requires Slope<S, P>
@@ -272,9 +279,13 @@ namespace gfx;
 			/* Side of the shortest slope. */
 			bool shortside = (y1 - y0) * (x2 - x0) < (x1 - x0) * (y2 - y0);
 
-			S slopes[2];
-			slopes[!shortside] = this->slope(a, c);
-			slopes[ shortside] = this->slope(a, b);
+			S slopes[2] = 
+			{
+				/* Yes, the initializer list is required here because otherwise
+				 * C++ would complain it needs S() to be valid. */
+				shortside == 0 ? this->slope(a, b) : this->slope(a, c),
+				shortside == 1 ? this->slope(a, b) : this->slope(a, c)
+			};
 
 			auto ye = y1;
 			for(auto y = y0;; ++y)
@@ -316,42 +327,47 @@ namespace gfx;
 
 	public:
 		Raster()
-		{
 			/* Create the thread pool. 
 			 * 
 			 * This will create a new unbalanced thread pool (which should not
 			 * be a problem, given it's work stealing) with as many workers as
 			 * there are hardware threads. */
-			this->pool = thread_pool::create();
-
+			: pool(thread_pool::default_concurrency())
+		{
 			/* Since C++ gets really bloated and hard to read at the mildest of
 			 * things and, no doubt, to generate a compile time error for the 
 			 * uninitialized functions it would turn this code unto an 
 			 * unreadable piece of satire.
 			 *
+			 * And strings have to be encoded in the input encodingn because
+			 * C++20 saw fit to effectively destroy all interop with UTF-8
+			 * strings by making `char8_t` its own special snowflake type, thus
+			 * rendering UTF-8 support in C++20 a fucking joke.
+			 * GOD I HATE THIS LANGUAGE SO MUCH
+			 *
 			 * std::function by default will throw `bad_function_call` when
 			 * trying to invoke a default-initialized function. I find that to
 			 * be still a bit too unclear for my taste, so I'll just do custom
 			 * runtime exception messages for this. */
-			this->transform = [](auto) 
+			this->transform = [](P) -> P
 			{
-				throw std::runtime_error(u8"raster call missing transform \
-					function");
+				auto what = u8"raster call missing transform function"_fb;
+				throw std::runtime_error(what);
 			};
-			this->screen = [](auto, auto, auto) 
+			this->screen = [](P) -> std::tuple<uint32_t, uint32_t> 
 			{
-				throw std::runtime_error(u8"raster call missing screen space \
-					conversion function");
+				auto what = u8"raster call missing screen space fucntion"_fb;
+				throw std::runtime_error(what);
 			};
-			this->slope = [](auto, auto)
+			this->slope = [](P, P) -> S
 			{
-				throw std::runtime_error(u8"raster call missing slope creation \
-					function");
+				auto what = u8"raster call missing slope creator function"_fb;
+				throw std::runtime_error(what);
 			};
 			this->painter = [](auto, auto, auto)
 			{
-				throw std::runtime_error(u8"raster call missing painter \
-					function");
+				auto what = u8"raster call missing painter function"_fb;
+				throw std::runtime_error(what);
 			};
 		}
 
@@ -360,9 +376,16 @@ namespace gfx;
 		 * when the triangle has been completely drawn. */
 		std::future<void> dispatch(P p0, P p1, P p2)
 		{
-			auto task = make_task([]() 
+			auto task = make_task<void>([&]() 
 			{
-				this->rasterize(p0, p1, p2);
+				Triangle triangle = 
+				{
+					.point0 = p0,
+					.point1 = p1,
+					.point2 = p2
+				};
+
+				this->rasterize(triangle);
 			});
 			return this->pool.submit_task(task);
 		}
