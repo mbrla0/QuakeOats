@@ -1,9 +1,9 @@
 CXX=clang++
 CXXFLAGS=-std=c++2a -stdlib=libc++ -fimplicit-modules -fimplicit-module-maps \
-	-fprebuilt-module-path=src/ -fsanitize=undefined -O0 -g
+	-fprebuilt-module-path=src/ -fsanitize=address -Wall -Wextra -pedantic -O2 -g
 
 LD=clang++
-LFLAGS=-fsanitize=undefined -O0 -g
+LFLAGS=-fsanitize=address -O2 -g
 
 LIBS=`pkg-config --libs sfml-all` -lpthread
 OBJS=src/main.o src/game.pcm src/gfx.pcm src/str.pcm

@@ -20,19 +20,16 @@ int main(void)
 
 	sf::RenderWindow window(video, title);
 	window.setActive();
+	window.setView(sf::View(sf::FloatRect(0.0, 0.0, WIDTH, HEIGHT)));
 
 	/* Create a graphics plane for the actual graphics operations and alias its
 	 * memory to an SFML image for upload to the window system. This is safe 
 	 * because the image will only ever be read from when the plane has already
 	 * been completed. */
-	gfx::Plane<Pixel> color(WIDTH, HEIGHT);
-	std::cerr << color.data() << std::endl;
+	game::Game game(WIDTH, HEIGHT);
 
-	sf::Image image;
-	image.create(WIDTH, HEIGHT, (sf::Uint8*) color.data());
 
 	/* Initialize the game. */
-	game::Game game(color);
 	while(!game.exit())
 	{
 		sf::Event event;
@@ -43,11 +40,15 @@ int main(void)
 		}
 		game.iterate();
 
+		sf::Image image;
+		image.create(WIDTH, HEIGHT, (sf::Uint8*) game.get_screen().data());
+
 		sf::Texture texture;
 		texture.loadFromImage(image);
 		
 		sf::Sprite sprite(texture);
-		
+		sprite.setOrigin(0, 0);
+
 		window.clear();
 		window.draw(sprite);
 		window.display();

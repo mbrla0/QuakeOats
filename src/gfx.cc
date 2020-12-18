@@ -10,6 +10,7 @@ import <sstream>;	/* AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.	*/
 import <cstdint>;	/* For standard integer types.		*/
 import <stdexcept>;	/* For standard exception types.	*/
 import <concepts>;	/* For standard concepts.			*/
+import <iostream>;	/* For warning messages.			*/
 import str;			/* Haha UTF-8 go brr.				*/
 
 export namespace gfx
@@ -164,6 +165,8 @@ export namespace gfx
 		}
 	};
 
+
+
 	template<typename T, typename P>
 	concept Slope = requires(T slope, double dPos, float fPos)
 	{
@@ -171,6 +174,8 @@ export namespace gfx
 		{ slope.at(fPos) } -> std::same_as<P>;
 	};
 
+	/* Structure representing a triangle. */
+	
 	template<typename P, typename S>
 		requires Slope<S, P>
 	class Raster
@@ -218,36 +223,14 @@ export namespace gfx
 		 * without the need for external synchronization.
 		 */
 		std::function<void(uint32_t, uint32_t, P)> painter;
-	protected:
-		/* Triangle work bundle. */
+	protected:	
+		/* Triangle point bundle. */
 		struct Triangle
 		{
 			P point0;
 			P point1;
 			P point2;
 		};
-
-		/* Render worker and its related parameters. */
-		struct Worker
-		{
-			/* Handle to the backing thread this worker runs on. */
-			std::thread thread;
-
-			/* Area value quantifying the amount of work current being 
-			 * shouldered by this worker. */
-			std::atomic<size_t> area;
-			
-			/* Queue of triangles to be rendered by this worker. */
-			work_queue<Triangle> queue;
-		};
-
-		/* When work is submitted to this raster, it gets parallelized in such
-		 * a way that tries to balance the work being done between all threads.
-		 * 
-		 * At creation, this vector should be populated with one worker for 
-		 * every hardware thread provided by the host.
-		 */
-		std::vector<Worker> workers;
 
 		/* This is the thread pool that will be running the rasterization tasks
 		 * on each and every one of our submitted triangles. */
@@ -257,10 +240,6 @@ export namespace gfx
 		/* Actually perform the raster operation using the given triangle. */
 		void rasterize(Triangle t)
 		{
-			auto [x0, y0, x1, y1, x2, y2] = std::tuple_cat(
-				this->screen(t.point0),
-				this->screen(t.point1),
-				this->screen(t.point2));
 			P a, b, c;
 
 			a = t.point0;
@@ -270,6 +249,12 @@ export namespace gfx
 			a = this->transform(a);
 			b = this->transform(b);
 			c = this->transform(c);
+
+			auto [x0, y0, x1, y1, x2, y2] = std::tuple_cat(
+				this->screen(a),
+				this->screen(b),
+				this->screen(c));
+			
 
 			/* Sort the points primarily by increasing Y and, secondy, by increasing X. */
 			if(std::tie(y0, x0) > std::tie(y1, x1)) { std::swap(a, b); std::swap(y0, y1); std::swap(x0, x1); }
@@ -288,7 +273,8 @@ export namespace gfx
 			};
 
 			auto ye = y1;
-			for(auto y = y0;; ++y)
+			auto yt = y0;
+			for(uint32_t y = y0;; ++y)
 			{
 				if(y >= ye)
 				{
@@ -298,21 +284,23 @@ export namespace gfx
 
 					/* We're at the end of the first bend, change the slopes. */
 					ye = y2;
+					yt = y1;
 					slopes[shortside] = this->slope(b, c);
 				}
 
-				double posY = (y - y0) / (y2 - y0);
-				auto p0 = slopes[0].at(posY);
-				auto p1 = slopes[1].at(posY);
+				double posY = (double) (y - y0) / (double) (y2 - y0);
+				double posR = (double) (y - yt) / (double) (ye - yt);
+				auto p0 = slopes[ shortside].at(posR);
+				auto p1 = slopes[!shortside].at(posY);
 
 				auto x0 = std::get<0>(this->screen(p0));
 				auto x1 = std::get<0>(this->screen(p1));
 				if(x0 > x1) { std::swap(x0, x1); std::swap(p0, p1); }
 
 				S slope = this->slope(p0, p1);
-				for(auto x = x0; x0 < x1; ++x)
+				for(uint32_t x = x0; x < x1; ++x)
 				{					
-					double posX = (x - x0) / (x1 - x0);
+					double posX = (double) (x - x0) / (double) (x1 - x0);
 					auto p = slope.at(posX);
 					
 					/* In order for this operation to be safe, it has to be 
@@ -325,6 +313,63 @@ export namespace gfx
 			}
 		}
 
+		/* Calculate an approximate double area value for the triangle. */
+		uint64_t darea(const Triangle t)
+		{
+			auto [x0, y0, x1, y1, x2, y2] = std::tuple_cat(
+				this->screen(t.point0),
+				this->screen(t.point1),
+				this->screen(t.point2));
+
+			uint32_t width  = std::max(x0, std::max(x1, x2)) - std::min(x0, std::min(x1, x2));
+			uint32_t height = std::max(y0, std::max(y1, y2)) - std::min(y0, std::min(y1, y2));
+			
+			return width * height; 
+		}
+
+		/* Divides a triangle into two smaller triangles, each with half the 
+		 * area of the original triangle. */
+		void bissect(const Triangle source, Triangle& t0, Triangle& t1)
+		{
+			Triangle a0, a1, b0, b1;
+			uint64_t area, max;
+
+			auto make = [&](P p0, P p1, P p2, Triangle& t0, Triangle& t1)
+			{
+				auto slope  = this->slope(p0, p1);
+				auto middle = slope.at(0.5);
+
+				t0.point0 = p0;
+				t0.point1 = middle;
+				t0.point2 = p2;
+
+				t1.point0 = middle;
+				t1.point1 = p1;
+				t1.point2 = p2;
+
+				return std::max(darea(t0), darea(t1));
+			};
+
+			max = make(source.point0, source.point1, source.point2, a0, a1);
+			area = make(source.point1, source.point2, source.point0, b0, b1);
+			if(area > max)
+			{
+				std::swap(a0, b0);
+				std::swap(a1, b1);
+				max = area;
+			}
+			area = make(source.point2, source.point0, source.point1, b0, b1);
+			if(area > max)
+			{
+				std::swap(a0, b0);
+				std::swap(a1, b1);
+				max = area;
+			}
+
+			t0 = a0;
+			t1 = a1;
+		}
+	
 	public:
 		Raster()
 			/* Create the thread pool. 
@@ -374,20 +419,185 @@ export namespace gfx
 		/* Dispatches the rendering of a triangle, given the coordinates for its
 		 * three vertices. This function returns a future that will be complete
 		 * when the triangle has been completely drawn. */
-		std::future<void> dispatch(P p0, P p1, P p2)
+		void dispatch(P p0, P p1, P p2, std::vector<std::future<void>>& futures)
 		{
-			auto task = make_task<void>([&]() 
+			/* Build the triangle structure. */
+			Triangle triangle = 
 			{
-				Triangle triangle = 
-				{
-					.point0 = p0,
-					.point1 = p1,
-					.point2 = p2
-				};
+				.point0 = p0,
+				.point1 = p1,
+				.point2 = p2
+			};
 
+			/* Tesselation step.
+			 * 
+			 * We first perform a tesselation step on the triangle such that no
+			 * CPU core ever has too much work on its hands trying to render a 
+			 * single triangle that happens to cover the entire screen. */
+			#define TESSEL_AREA_THRESHOLD (1024 * 64)
+
+			/*uint64_t area = darea(triangle);
+			if(area > TESSEL_AREA_THRESHOLD)
+			{
+				Triangle t0, t1;
+				bissect(triangle, t0, t1);
+			
+				if(std::max(darea(t0), darea(t1)) != area)
+				{
+					dispatch(t0.point0, t0.point1, t0.point2, futures);
+					dispatch(t1.point0, t1.point1, t1.point2, futures);
+				}
+			}*/
+
+			/* We're satistifed with the size of the fragment. So submit it. */
+			auto task = make_task<void>([triangle, this]() 
+			{	
 				this->rasterize(triangle);
 			});
-			return this->pool.submit_task(task);
+			futures.push_back(this->pool.submit_task(task));
+		}
+	};
+
+	/* Primitive input type used by the Mesh to build triangles from index data.
+	 * These variants control how the input will be used and how much imput is 
+	 * needed for every new triangle. */
+	enum class Primitive
+	{
+		/* Every triplet of vertices describes a new triangle. */
+		TriangleList,
+		/* Every three consecutive vertices describe a new triangle. */
+		TriangleStrip
+	};
+
+	/* Geometry mesh draw command.
+	 *
+	 * This class holds a point buffer and an index buffer, both are used to 
+	 * build the triangles that will get submitted to the dispatch function of a
+	 * given renderer. */
+	template<typename P>
+	class Mesh
+	{
+	protected:
+		/* The vertex point data for this mesh. */
+		const std::vector<P>& _vertices;
+		
+		/* The indices used to assemble the vertex data into triangles. */
+		const std::vector<size_t>& _indices;
+
+		/* How the index data will be used to assemble triangle.s */
+		Primitive _primitive = Primitive::TriangleStrip;
+	public:
+		/* Create a new mesh object with the given vertex and index data. */
+		Mesh(const std::vector<P>& vertices, const std::vector<size_t>& indices)
+			: _vertices(vertices), _indices(indices)
+		{ }
+	
+		/* Create a new mesh object with the given vertex and idex data, along
+		 * with the given primitive assembler type. */
+		Mesh(
+			std::vector<P>& vertices, 
+			std::vector<size_t>& indices,
+			Primitive primitive)
+			: _vertices(vertices), _indices(indices), _primitive(primitive)
+		{ }
+	protected:
+		/* Assembles the input in triangle list mode and actually performs all 
+		 * of the dispatch operations on the triangles. */
+		template<typename S>
+			requires Slope<S, P>
+		void dispatch_triangle_list(
+			Raster<P, S>& raster, 
+			std::vector<std::future<void>>& futures) const
+		{	
+			if(_indices.size() % 3 != 0)
+			{
+				std::cerr << "warning: mesh in triangle list mode will have ";
+				std::cerr << "its trailing " << _indices.size() % 3 << " ";
+				std::cerr << "indices ignored for not having a multiple of 3";
+				std::cerr << std::endl;
+			}
+			if(_indices.size() / 3 == 0) 
+			{
+				/* No work to do. */
+				std::cerr << "warning: submitted mesh with no completable work";
+				std::cerr << std::endl;
+				return;
+			}
+
+			for(size_t i = 0; i + 2 < _indices.size(); i += 3)
+			{
+				P p0, p1, p2;
+				p0 = _vertices[_indices[i + 0]];
+				p1 = _vertices[_indices[i + 1]];
+				p2 = _vertices[_indices[i + 2]];
+
+				raster.dispatch(p0, p1, p2, futures);
+			}
+		}
+
+		/* Assembles the input in triangle strip mode and actually performs all
+		 * of the dispatch operations on the triangles. */
+		template<typename S>
+			requires Slope<S, P>
+		void dispatch_triangle_strip(
+			Raster<P, S>& raster, 
+			std::vector<std::future<void>>& futures) const
+		{
+			if(_indices.size() / 3 == 0) 
+			{
+				/* No work to do. */
+				std::cerr << "warning: submitted mesh with no completable work";
+				std::cerr << std::endl;
+				return;
+			}
+
+			for(size_t i = 0; i + 2 < _indices.size(); ++i)
+			{
+				P p0, p1, p2;
+				p0 = _vertices[_indices[i + 0]];
+				p1 = _vertices[_indices[i + 1]];
+				p2 = _vertices[_indices[i + 2]];
+
+				raster.dispatch(p0, p1, p2, futures);
+			}
+		}
+
+	public:
+		/* Assemble the the geometry in this mesh into triangles and dispatch
+		 * them to the given raster, saving the futures of the operation in the
+		 * given vector. 
+		 *
+		 * This function does not block waiting for the render operation to
+		 * complete. If that is what you want, use `draw()` instead. */
+		template<typename S>
+			requires Slope<S, P>
+		void dispatch(
+			Raster<P, S>& raster, 
+			std::vector<std::future<void>>& futures) const
+		{
+			switch(_primitive)
+			{
+			case Primitive::TriangleList: 
+				dispatch_triangle_list(raster, futures);
+				break;
+			case Primitive::TriangleStrip: 
+				dispatch_triangle_strip(raster, futures);
+				break;
+			}
+		}
+		
+		/* Assemble the the geometry in this mesh into triangles and dispatch
+		 * them to the given raster. This function blocks waiting for the mesh
+		 * to be fully drawn. */
+		template<typename S>
+			requires Slope<S, P>
+		void draw(Raster<P, S>& raster) const
+		{
+			std::vector<std::future<void>> commands;
+			dispatch(raster, commands);
+
+			for(size_t i = 0; i < commands.size(); ++i)
+				commands[i].wait();
 		}
 	};
 }
