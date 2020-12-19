@@ -11,6 +11,7 @@ import <cstdint>;	/* For standard integer types.		*/
 import <stdexcept>;	/* For standard exception types.	*/
 import <concepts>;	/* For standard concepts.			*/
 import <iostream>;	/* For warning messages.			*/
+import <cmath>;		/* For floor() and ceil().			*/
 import str;			/* Haha UTF-8 go brr.				*/
 
 export namespace gfx
@@ -165,8 +166,6 @@ export namespace gfx
 		}
 	};
 
-
-
 	template<typename T, typename P>
 	concept Slope = requires(T slope, double dPos, float fPos)
 	{
@@ -174,8 +173,89 @@ export namespace gfx
 		{ slope.at(fPos) } -> std::same_as<P>;
 	};
 
-	/* Structure representing a triangle. */
-	
+	/* Plane sampler.
+	 * 
+	 * This structure is responsible for sampling data from the plane and
+	 * and interpolating that data using the given slope type and generation
+	 * functor. This sampler behaves very much like the image samplers in OpenGL
+	 * and Vulkan. */
+	template<typename T, typename S>
+		requires Slope<S, T>
+	class Sampler
+	{
+	protected:
+		/* The plane whose values are to be interpolated with the slope. */
+		Plane<T>& _plane;
+
+		/* The slope generation function. */
+		std::function<S(T, T)> _slope;
+	public:
+		/* Create a new sampler for the given plane with the given slope 
+		 * generation function. */
+		Sampler(
+			Plane<T> &plane,
+			std::function<S(T, T)> slope)
+			: _plane(plane), _slope(slope)
+		{ }	
+
+		/* Sample data from this plane at the given coordinates. The sampled 
+		 * value resulting from this function will be 4-way interpolated using 
+		 * the templated slope type and provided slope generation function.
+		 * 
+		 * It is important to note that these coordinates are not in plane 
+		 * space, instead, they sit in an arbirray space from (0, 0) to (1, 1),
+		 * with the following mapping into plane space:
+		 *
+		 *   (0, 1)                    (1, 1)
+		 *    |------------|------------|
+		 *    |            |            |
+		 *    |            |            |
+		 *    |            |            |
+		 *    |--------(0.5,0.5)--------|
+		 *    |            |            |
+		 *    |            |            |
+		 *    |            |            |
+		 *    |------------|------------|
+		 *   (0, 0)                    (1, 0)
+		 *
+		 * This is done to match the behaviors found in OpenGL and Vulkan, which
+		 * is what most toolage for textures out there expects.
+		 */
+		T at(double x, double y) const
+		{
+			/* Map our input space into the plane. */
+			x = x * (double) _plane.width();
+			y = y * (double) _plane.height();
+			y = (double) _plane.height() - 1;
+
+			/* Clamp resulting coordinates into fitting neatly into the sampled
+			 * plane. This guarantees this function will behave nicely at the
+			 * edges of the input and not generate any undesided exceptions. */
+			x = std::clamp(x, 0.0, (double) _plane.width()  - 1.0);
+			y = std::clamp(x, 0.0, (double) _plane.height() - 1.0);
+
+			/* Figure out our neighbourhood. */
+			T t00 = _plane.at(std::floor(x), std::ceil(y));
+			T t01 = _plane.at(std::floor(x), std::floor(y));
+			T t10 = _plane.at(std::ceil(x),  std::ceil(y));
+			T t11 = _plane.at(std::ceil(x),  std::floor(y));
+
+			/* 4-way interpolate it. */
+			double a = x - std::floor(x);
+			double b = y - std::floor(y);
+
+			S s0 = _slope(t01, t00);
+			S s1 = _slope(t11, t10);
+
+			T u0 = s0.at(b);
+			T u1 = s1.at(b);
+
+			S s2 = _slope(u0, u1);
+			return s2.at(a);
+		}
+		T at(float x, float y) const { return at((double) x, (double) y); }
+	};
+
 	template<typename P, typename S>
 		requires Slope<S, P>
 	class Raster

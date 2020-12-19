@@ -73,6 +73,44 @@ export namespace game
 		
 	};
 
+	/* Input mapper read by the game. */
+	class Controller
+	{
+	protected:
+		/* Mouse X and Y axis movement. */
+		int32_t mx, my;
+
+		/* Forward, backward, left and right. */
+		bool fwd, bkw, lft, rht;
+
+		/* Fire and chrouch. */
+		bool fre, cch;
+	public:
+		int32_t mouse_x() const noexcept { return mx; }
+		int32_t mouse_y() const noexcept { return my; }
+		
+		bool forward()  const noexcept { return fwd; }
+		bool backward() const noexcept { return bkw; }
+		bool left()     const noexcept { return lft; }
+		bool right()    const noexcept { return rht; }
+		bool fire()     const noexcept { return fre; }
+		bool crouch()   const noexcept { return cch; }
+		
+		int32_t mouse_x_nudge(int32_t x) noexcept { return (mx += x); } 
+		int32_t mouse_y_nudge(int32_t y) noexcept { return (my += y); } 
+
+		int32_t mouse_x(int32_t x) noexcept { return (mx = x); }
+		int32_t mouse_y(int32_t y) noexcept { return (my = y); }
+
+		bool forward(bool v)  noexcept { return (fwd = v); }
+		bool backward(bool v) noexcept { return (bkw = v); }
+		bool left(bool v)     noexcept { return (lft = v); }
+		bool right(bool v)    noexcept { return (rht = v); }
+		bool fire(bool v)     noexcept { return (fre = v); }
+		bool crouch(bool v)   noexcept { return (cch = v); }
+
+	};
+
 	class Game
 	{
 	protected:
@@ -99,6 +137,9 @@ export namespace game
 		 * affected by world transformations and effects.
 		 */
 		gfx::Raster<Vertex, VertexSlope> world;
+
+		/* Input map. */
+		Controller _controller;	
 	public:
 		Game(uint32_t width, uint32_t height)
 			: screen(width, height), depth(width, height), lock(width, height)
@@ -140,6 +181,10 @@ export namespace game
 			};
 		}
 
+		/* Reference to the controller interface for this game. */
+		const Controller& controller() const noexcept { return _controller; }
+		      Controller& controller()       noexcept { return _controller; }
+
 		/* Perform one iteration of the game loop. */
 		void iterate()
 		{
@@ -172,7 +217,7 @@ export namespace game
 
 			vertices[0].color = glm::vec4(0.0, 1.0, 1.0, 1.0);
 			vertices[1].color = glm::vec4(0.0, 0.0, 1.0, 1.0);
-			vertices[2].color = glm::vec4(0.0, 0.0, 0.0, 1.0);
+			vertices[2].color = glm::vec4(1.0, 0.0, 1.0, 1.0);
 			vertices[3].color = glm::vec4(0.0, 1.0, 0.0, 1.0);
 			vertices[4].color = glm::vec4(1.0, 1.0, 1.0, 1.0);
 
@@ -186,7 +231,7 @@ export namespace game
 				glm::mat4 t, p;
 				t = glm::translate(glm::vec3(0.0, 0.0, -5.0));
 				t = glm::rotate(t, glm::radians((float) a * 20), glm::vec3(0.0, 1.0, 0.0));
-				p = glm::perspective(glm::radians(90.0), 1.0, 0.1, 100.0);
+				p = glm::perspective(glm::radians(90.0), 4.0 / 3.0, 0.1, 100.0);
 
 				v.position  = p * t * v.position;
 				v.position /= v.position.w;
