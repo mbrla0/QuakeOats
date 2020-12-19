@@ -5,7 +5,15 @@ CXXFLAGS=-std=c++2a -stdlib=libc++ -fimplicit-modules -fimplicit-module-maps \
 LD=clang++
 LFLAGS=-fsanitize=address -O2 -g
 
-LIBS=`pkg-config --libs sfml-all` -lpthread
+# I
+# FUCKING
+# HATE
+# C++
+# LINKER
+# ERRORS
+# i had 58000 bytes of linker errors on a program whose entire source
+# code is 34942 bytes because -lc++ was missing
+LIBS=`pkg-config --libs sfml-all` -lpthread -lc++
 OBJS=src/main.o src/game.pcm src/gfx.pcm src/str.pcm
 QuakeOats: Makefile $(OBJS)
 	$(LD) $(LFLAGS) -o $@ $(OBJS) $(LIBS)
