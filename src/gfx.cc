@@ -31,6 +31,22 @@ export namespace gfx
 			this->blue  = 0;
 			this->alpha = 0xff;
 		}
+
+		PixelRgba32(uint8_t v)
+		{
+			this->red   = v;
+			this->green = v;
+			this->blue  = v;
+			this->alpha = v;
+		}
+
+		PixelRgba32(uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+		{
+			this->red   = r;
+			this->green = g;
+			this->blue  = b;
+			this->alpha = a;
+		}
 	};
 
 	/* A plane of data points. */

@@ -8,6 +8,7 @@ export module game;
 import <concepts>;	/* For standard concepts.		*/
 import <sstream>;	/* AAAAAAAAAAAAAAAAAAAAAAAAAAA.	*/
 import gfx;			/* For planes and rasterizers.	*/
+import map;			/* For asset loading.			*/
 
 export namespace game
 {

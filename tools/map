@@ -1,0 +1,122 @@
+#!/usr/bin/env python3
+# tools/map - Creates a map from a map descriptor.
+
+import sys
+if len(sys.argv) != 2:
+	print("Usage: {} <map>.json".format(sys.argv[0]), file = sys.stderr)
+	sys.exit(1)
+
+import os.path
+map_dir = os.path.split(sys.argv[1])[0]
+
+import json
+with open(sys.argv[1], "r") as f:
+	map_data = json.load(f)
+
+def wimage(path, out):
+	"""
+	Writes an image in the format expected by the map into out.
+	Arguments:
+		- path: Path to the image file.
+		- out:  Output write object.
+	"""
+	import imageio
+	image = imageio.imread(path)
+
+	height, width, colors = image.shape
+	if colors != 4:
+		print("error: expected 4 channel image", file = sys.stderr)
+		sys.exit(1)
+	if image.dtype != "uint8":
+		print("error: expected uint8 for the color channels", file = sys.stderr)
+		sys.exit(1)
+
+	import struct
+	header = struct.pack("<II", width, height)
+	out.write(header)
+
+	for i in range(height):
+		for j in range(width):
+			pixel = struct.pack("<BBBB", 
+				image[i, j, 0],
+				image[i, j, 1],
+				image[i, j, 2],
+				image[i, j, 3])
+			out.write(pixel)
+
+def wmodel(path, position, scale, rotation, out):
+	"""
+	Writes a model in the format expected by the map into out. Returns the 
+	number of model slices written.
+	Arguments:
+		- path: Path to the Wavefront OBJ file.
+		- out:  Output write object.
+	"""
+	import pywavefront as pw
+	model = pw.Wavefront(path)
+
+	count = 0
+	for name, material in model.materials.items():
+		if not material.texture is None:
+			tname = material.texture.name
+			tindx = map_data["textures"].index(tname) + 1
+		else:
+			tindx = 0
+		
+		import struct
+		header = struct.pack("<IIIfffffffff",
+			0, # Use the TriangleList primitive assembler.
+			int(len(material.vertices) / 8), # Number of vertices.
+			int(len(material.vertices) / 8), # Number of indices.
+			position[0],
+			position[1],
+			position[2],
+			scale[0],
+			scale[1],
+			scale[2],
+			rotation[0],
+			rotation[1],
+			rotation[2])
+		out.write(header)
+
+		for i in range(int(len(material.vertices) / 8)):
+			point = struct.pack("<Ifffffffff",
+				tindx,
+				material.vertices[i * 8 + 0], # Texture I
+				material.vertices[i * 8 + 1], # Texture J
+				material.vertices[i * 8 + 2], # Normal X
+				material.vertices[i * 8 + 3], # Normal Y
+				material.vertices[i * 8 + 4], # Normal Z
+				material.vertices[i * 8 + 5], # Position X
+				material.vertices[i * 8 + 6], # Position Y
+				material.vertices[i * 8 + 7], # Position Z
+				1.0)                          # Position W
+			out.write(point)
+		for i in range(int(len(material.vertices) / 8)):
+			index = struct.pack("<I", i)
+			out.write(index)
+		count += 1
+
+	return count
+
+out = os.path.splitext(sys.argv[1])[0] + ".map"
+out = open(out, "wb")
+
+import struct
+header = struct.pack("<II",
+	len(map_data["textures"]),
+	len(map_data["models"]))
+out.write(header)
+
+for texture in map_data["textures"]:
+	path = os.path.join(map_dir, texture)
+	wimage(path, out)
+
+for model in map_data["models"]:
+	path  = os.path.join(map_dir, model["model"])
+	pos   = model["position"]
+	scale = model["scale"]
+	rot   = model["rotation"]
+	wmodel(path, pos, scale, rot, out)
+
+out.close()

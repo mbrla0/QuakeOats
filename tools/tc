@@ -1,0 +1,36 @@
+#!/usr/bin/env python3
+#
+# tools/tc - Creates a TrueColor file as read by the game from an input image
+# in any of the formats supported by imageio.
+
+import sys
+if len(sys.argv) != 2:
+	print("Usage: {} <image>".format(sys.argv[0]), file = sys.stderr)
+	sys.exit(1)
+
+import imageio
+image = imageio.imread(sys.argv[1])
+
+height, width, colors = image.shape
+if colors != 4:
+	print("error: expected 4 channel image", file = sys.stderr)
+	sys.exit(1)
+if image.dtype != "uint8":
+	print("error: expected uint8 for the color channels", file = sys.stderr)
+	sys.exit(1)
+
+out = sys.stdout.buffer
+
+import struct
+header = struct.pack("<II", width, height)
+out.write(header)
+
+for i in range(height):
+	for j in range(width):
+		pixel = struct.pack("<BBBB", 
+			image[i, j, 0],
+			image[i, j, 1],
+			image[i, j, 2],
+			image[i, j, 3])
+		out.write(pixel)
+out.flush()
