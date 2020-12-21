@@ -32,9 +32,9 @@ src/str.pcm: src/str.cc
 	$(CXX) $(CXXFLAGS) -c $< -Xclang -emit-module-interface -o $@
 
 # Asset generation functions
-assets/cube.map: assets/cube.json assets/grass.png assets/cube.obj assets/cube.mtl
+assets/cube.map: assets/cube.json tools/map assets/grass.png assets/cube.obj assets/cube.mtl
 	tools/map $< || { rm -rf $@; exit 1; }
-assets/map0.map: assets/map0.json assets/arena.png assets/arena.obj assets/arena.mtl
+assets/map0.map: assets/map0.json tools/map assets/arena.png assets/arena.obj assets/arena.mtl
 	tools/map $< || { rm -rf $@; exit 1; }
 
 .PHONY: clean all docker

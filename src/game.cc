@@ -372,7 +372,6 @@ export namespace game
 				world.project = [&](map::Point p)
 				{
 					float z = p.position.z;
-
 					p.position = this->projection * p.position;
 					p.position /= p.position.w;
 					p.position.z = z;
@@ -416,11 +415,12 @@ export namespace game
 						return;
 					}
 					depth.at(x, y) = p.position.z;
-					screen.at(x, y) = sampler.at(p.sampler.x, p.sampler.y);
 
-					screen.at(x, y).red   /= std::max(p.position.z / 5.0f, 1.0f);
-					screen.at(x, y).green /= std::max(p.position.z / 5.0f, 1.0f);
-					screen.at(x, y).blue  /= std::max(p.position.z / 5.0f, 1.0f);
+					glm::vec3 color = p.color;
+					screen.at(x, y).red   = color.x / std::max(p.position.z / 10.0f, 1.0f);
+					screen.at(x, y).green = color.y / std::max(p.position.z / 10.0f, 1.0f);
+					screen.at(x, y).blue  = color.z / std::max(p.position.z / 10.0f, 1.0f);
+					screen.at(x, y).alpha = 255;
 
 					lock.at(x, y).unlock();
 				};

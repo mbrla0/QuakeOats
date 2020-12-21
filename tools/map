@@ -79,14 +79,29 @@ def wmodel(path, position, scale, rotation, out):
 			rotation[2])
 		out.write(header)
 
+		import imageio
+		tex = imageio.imread(os.path.join(map_dir, tname))
+		if len(tex[0][0]) != 4:
+			file("TEXTURE FILE HAS TO HAVE 4 COLOR CHANNELS", file=sys.stderr)
+			sys.exit(1)
+	
 		for i in range(int(len(material.vertices) / 8)):
+			ti = material.vertices[i * 8 + 0]
+			tj = material.vertices[i * 8 + 1]
+
+			tji = int((1.0 - tj) * len(tex))
+			if tji >= len(tex): tji = len(tex) - 1
+
+			tii = int(ti * len(tex[tji]))
+			if tii >= len(tex[tji]): tii = len(tex[tji]) - 1
+
 			point = struct.pack("<Ifffffffff",
 				tindx,
 				material.vertices[i * 8 + 0], # Texture I
 				material.vertices[i * 8 + 1], # Texture J
-				material.vertices[i * 8 + 2], # Normal X
-				material.vertices[i * 8 + 3], # Normal Y
-				material.vertices[i * 8 + 4], # Normal Z
+				tex[tji][tii][0], # Color X
+				tex[tji][tii][1], # Color Y
+				tex[tji][tii][2], # Color Z
 				material.vertices[i * 8 + 5], # Position X
 				material.vertices[i * 8 + 6], # Position Y
 				material.vertices[i * 8 + 7], # Position Z

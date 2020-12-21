@@ -246,8 +246,8 @@ export namespace map
 		/* Texture coordinates in sampler space. */
 		glm::vec2 sampler;
 
-		/* Components of the normal vector. */
-		glm::vec3 normal;
+		/* Components of the color vector. */
+		glm::vec3 color;
 
 		/* Position of this point in model space. */
 		glm::vec4 position;
@@ -279,7 +279,7 @@ export namespace map
 			Point p;
 			p.texture_index = t;
 			p.sampler  = glm::vec2(i, j);
-			p.normal   = glm::vec3(nx, ny, nz);
+			p.color    = glm::vec3(nx, ny, nz);
 			p.position = glm::vec4(x, y, z, w);
 
 			return p;
@@ -302,7 +302,7 @@ export namespace map
 			Point t;
 			t.texture_index = _a.texture_index;
 			t.sampler  = glm::mix(_a.sampler,  _b.sampler,  x);
-			t.normal   = glm::mix(_a.normal,   _b.normal,   x);
+			t.color    = glm::mix(_a.color,    _b.color,    x);
 			t.position = glm::mix(_a.position, _b.position, x);
 
 
