@@ -26,4 +26,5 @@ Here are some quotes from some of our satisfied customers:
     - 「I want to destroy the world」、桃鈴ねね
     - 「AH↗️HA↘️HA↗️HA↘️」、兎田ぺこら
     - 「Gomenasorry Kaichou wakarunderstand now watashitachi communicate with subaramazing Japanglish」、r/hololive
+    - 「量子 チキン スープ グラス ビッグ チュング ス ? !」、Tatsunoko
     
