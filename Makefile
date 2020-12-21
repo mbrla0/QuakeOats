@@ -6,14 +6,6 @@ CXXFLAGS=-std=c++2a -stdlib=libc++ -fimplicit-modules -fimplicit-module-maps \
 LD=clang++
 LFLAGS=-O2 -g
 
-# I
-# FUCKING
-# HATE
-# C++
-# LINKER
-# ERRORS
-# i had 58000 bytes of linker errors on a program whose entire source
-# code is 34942 bytes because -lc++ was missing
 LIBS=`pkg-config --libs sfml-all` -lpthread -lc++
 OBJS=src/main.o src/game.pcm src/map.pcm src/gfx.pcm src/str.pcm
 ASST=assets/cube.map assets/map0.map

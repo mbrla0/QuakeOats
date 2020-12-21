@@ -583,8 +583,7 @@ export namespace gfx
 			 * And strings have to be encoded in the input encodingn because
 			 * C++20 saw fit to effectively destroy all interop with UTF-8
 			 * strings by making `char8_t` its own special snowflake type, thus
-			 * rendering UTF-8 support in C++20 a fucking joke.
-			 * GOD I HATE THIS LANGUAGE SO MUCH
+			 * rendering UTF-8 support in C++20 a joke.
 			 *
 			 * std::function by default will throw `bad_function_call` when
 			 * trying to invoke a default-initialized function. I find that to

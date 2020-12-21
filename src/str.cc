@@ -9,8 +9,6 @@
  * This is done by simply casting the const pointer to `char8_t` to a const
  * pointer of `char`, which shouldnt really be *undefined behaviour* so long
  * as there are no special alignment requirements for your char type.
- *
- * Also "fb" stands for "Fuck Bjarne".
  */
 
 export module str;
