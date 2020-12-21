@@ -219,9 +219,92 @@ export namespace game
 
 					return p;
 				};
-				world.clip = [&](map::Point a, map::Point b, map::Point c)
+				world.tesselation = [&](
+					map::Point a, 
+					map::Point b, 
+					map::Point c, 
+					std::function<map::Point, map::Point, map::Point> dispatch)
 				{
+					glm::vec3 q(0.0, 0.0, 1.0);
+					glm::vec3 n(0.0, 0.0, 1.0);
 					
+					auto ndot = [&](glm::vec3 p)
+					{
+						return glm::dot(n, p - q);
+					};
+
+					auto lncross = [&](glm::vec3 a, glm::vec3 b) -> std::optional<glm::vec3>
+					{
+						glm::vec3 v0 = a - q;
+						glm::vec3 v1 = b - q;
+
+						float d0 = glm::dot(n, v0);
+						float d1 = glm::dot(n, v1);
+
+						if(std::signbit(d0) == std::signbit(d1))
+							/* Line segment doesn't cross the plane. */
+							return {};
+
+						float t = d0 / (d1 - d0);
+						return a + t * (b - a);
+					};
+
+					auto lenrat = [](glm::vec3 a, glm::vec3 shrt, glm::vec3 lng)
+					{
+						float l = glm::length(lng  - a);
+						float s = glm::length(shrt - a);
+
+						return s / l;
+					};
+					
+					uint32_t trigs = 0;
+					map::Point points[4];
+
+					auto p_lncross = [&](map::Point a, map::Point b) -> std::optional<map::Point>
+					{
+						std::optional<glm::vec3> ocross = lncross(
+							a.position.xyz, 
+							b.position.xyz);
+						if(!ocross) return {};
+						
+						glm::vec3 cross = ocross.value();
+						float mid = lenrat(
+							a.position.xyz,
+							cross,
+							b.position.xyz);
+
+						map::PointSlope slope(a, b);
+						map::Point mid = slope.at(mid);
+
+						return mid;
+					};
+					
+					auto test = [&](map::Point p)
+					{
+						if(!std::signbit(ndot(p.position.xyz))) 
+						{
+							if(trigs >= 4)
+								throw std::runtime_error(u8"more than three points in triangle crossing"_fb);
+							points[trigs++] = p;
+						}
+					};
+				
+					std::optional<map::Point> cross;
+					test(a);
+					if((cross = p_lncross(a, b)) test(cross.value());
+					test(b);
+					if((cross = p_lncross(b, c)) test(cross.value());
+					test(c);
+					if((cross = p_lncross(c, a)) test(cross.value());
+
+					if(trigs == 3)
+						dispatch(points[0], points[1], points[2]);
+					else if(trigs == 4)
+					{
+						dispatch(points[0], points[1], points[2]);
+						dispatch(points[1], points[2], points[3]);
+					}
+
 				};
 				world.project = [&](map::Point p)
 				{

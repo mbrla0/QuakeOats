@@ -368,13 +368,10 @@ export namespace gfx
 		 * tuple for the bounds of the clipping rectangle. */
 		std::function<std::tuple<uint32_t, uint32_t, uint32_t, uint32_t>()> scissor;
 
-		/* Clipper function for deleting off-screen geometry.
-		 *
-		 * Given three vertices of a transformed triangle, this function must 
-		 * decide on whether the triangle should be clipped (i. e. ignored)
-		 * during the render process.
-		 */
-		std::function<std::optional<std::tuple<P, P, P>>(P, P, P)> clip;
+		/* Tesselation function.
+		 * This function is responsible for generating a number of output triangles 
+		 * from a given triangle input. */
+		std::function<void(P, P, P, std::function<void(P, P, P)>)> tesselation;
 
 		/* This function gets called at the bottom of the raster pipeline and
 		 * to it is given a position X in screen space, followed by a position 
@@ -406,9 +403,8 @@ export namespace gfx
 		 * on each and every one of our submitted triangles. */
 		thread_pool pool;
 	protected:
-
-		/* Actually perform the raster operation using the given triangle. */
-		void rasterize(Triangle t)
+		/* Set up the rasterization by clipping the input triangle. */
+		void clip_rasterize(Triangle t)
 		{
 			P a, b, c;
 
@@ -420,14 +416,26 @@ export namespace gfx
 			b = this->transform(b);
 			c = this->transform(c);
 
-			auto clip = this->clip(a, b, c);
-			if(!clip)
-				/* Clip unnecessary geomtry. */
-				return;
+			this->clip(
+				a, b, c,
+				[&](P i, P j, P k)
+				{
+					Triangle t;
+					t.point0 = i;
+					t.point0 = j;
+					t.point0 = k;
+					this->rasterize(t);
+				});
+		}
 
-			a = std::get<0>(clip.value());
-			b = std::get<1>(clip.value());
-			c = std::get<2>(clip.value());
+		/* Actually perform the raster operation using the given triangle. */
+		void rasterize(Triangle t)
+		{
+			P a, b, c;
+
+			a = t.point0;
+			b = t.point1;
+			c = t.point2;
 
 			a = this->project(a);
 			b = this->project(b);
@@ -649,7 +657,7 @@ export namespace gfx
 			/* We're satistifed with the size of the fragment. So submit it. */
 			auto task = make_task<void>([triangle, this]() 
 			{	
-				this->rasterize(triangle);
+				this->clip_rasterize(triangle);
 			});
 			futures.push_back(this->pool.submit_task(task));
 		}
