@@ -611,7 +611,7 @@ export namespace gfx
 			};
 			this->tesselation = [](P, P, P, std::function<void(P, P, P)>) -> void
 			{
-				auto what = u8"raster call missing clip function"_fb;
+				auto what = u8"raster call missing tesselation function"_fb;
 				throw std::runtime_error(what);
 			};
 			this->painter = [](auto, auto, auto)

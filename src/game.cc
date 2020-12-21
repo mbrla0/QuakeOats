@@ -159,7 +159,7 @@ export namespace game
 		{ 
 			/* Load the map. */
 			std::ifstream map;
-			map.open("assets/map0.map", std::ios_base::in | std::ios_base::binary);
+			map.open("assets/cube.map", std::ios_base::in | std::ios_base::binary);
 			if(!map)
 				throw std::runtime_error("could not open assets/map0.map");
 
@@ -184,7 +184,7 @@ export namespace game
 			static double angle = - 3.1415 / 2.0;
 			player.position.x = 0.0;
 			player.position.z = 0.0;
-			player.position.y = -10.0;
+			player.position.y = 0.0;
 			player.scaling = glm::vec3(1.0);
 			/*player.rotation.x = 3.1415 / 2.0;*/
 			player.rotation.y = angle;
@@ -282,7 +282,7 @@ export namespace game
 					
 					auto test = [&](map::Point p)
 					{
-						if(!std::signbit(ndot(p.position.xyz()))) 
+						if(ndot(p.position.xyz()) > 0.0) 
 						{
 							if(trigs >= 4)
 								throw std::runtime_error(u8"more than three points in triangle crossing"_fb);
