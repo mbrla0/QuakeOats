@@ -22,3 +22,8 @@ Here are some quotes from some of our satisfied customers:
     - 「That's it, you're going to Brazil」、Joker Kitchen 
     - 「だめだね だめよ だめなのよ」、桐生ココ & 堂島の龍
     - 「FAQ U」、Elite Miko
+    - 「Have confidence! ... No confidence!」、戌神ころね
+    - 「I want to destroy the world」、桃鈴ねね
+    - 「AH↗️HA↘️HA↗️HA↘️」、兎田ぺこら
+    - 「Gomenasorry Kaichou wakarunderstand now watashitachi communicate with subaramazing Japanglish」、r/hololive
+    
