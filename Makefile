@@ -15,7 +15,7 @@ LFLAGS=-fsanitize=address -O2 -g
 # code is 34942 bytes because -lc++ was missing
 LIBS=`pkg-config --libs sfml-all` -lpthread -lc++
 OBJS=src/main.o src/game.pcm src/map.pcm src/gfx.pcm src/str.pcm
-ASST=assets/map0.map
+ASST=assets/cube.map assets/map0.map
 
 QuakeOats: Makefile $(OBJS) $(ASST)
 	$(LD) $(LFLAGS) -o $@ $(OBJS) $(LIBS)
@@ -31,8 +31,10 @@ src/str.pcm: src/str.cc
 	$(CXX) $(CXXFLAGS) -c $< -Xclang -emit-module-interface -o $@
 
 # Asset generation functions
-%.map: %.json
-	tools/map $< > $@ || { rm -rf $@; exit 1; }
+assets/cube.map: assets/cube.json assets/grass.png assets/cube.obj assets/cube.mtl
+	tools/map $< || { rm -rf $@; exit 1; }
+assets/map0.map: assets/map0.json assets/arena.png assets/arena.obj assets/arena.mtl
+	tools/map $< || { rm -rf $@; exit 1; }
 
 .PHONY: clean
 clean:

@@ -3,6 +3,15 @@ module;
 #include <glm/glm.hpp>
 #include <glm/gtx/transform.hpp>
 
+/* Test for the endianness of the host machine. */
+bool LITTLE_ENDIAN_HOST()
+{
+	uint32_t val = 1;
+	char* bytes = (char*) &val;
+
+	return bytes[0] == 1;
+}
+
 export module map;
 
 import <iostream>;	/* For stream functionality.	*/
@@ -14,6 +23,55 @@ import str;			/* For UTF-8 strings.			*/
 
 export namespace map
 {
+	/* Load a 32-bit floating point value from a stream.
+	 * The floating point input is treatead as little endian. */
+	std::istream& next_float32_le(std::istream& data, float& target)
+	{
+		static_assert(sizeof(float) == 4);
+		static_assert(sizeof(char)  == 1);
+
+		struct alignas(float) { char b[sizeof(float)]; } buf;
+		data.read(buf.b, sizeof(float));
+
+		if(!LITTLE_ENDIAN_HOST())
+		{
+			char tmp;
+			for(size_t i = 0; i <= sizeof(float) / 2; ++i)
+			{
+				tmp = buf.b[sizeof(float) - i - 1];
+				buf.b[sizeof(float) - i - 1] = buf.b[0];
+				buf.b[0] = tmp;
+			}
+		}
+		std::memcpy((void*) &target, (const void*) buf.b, 4);
+		return data;
+	}
+
+	/* Load a 32-bit unsigned integer value from a stream.
+	 * The floating point input is treatead as little endian. */
+	std::istream& next_uint32_le(std::istream& data, uint32_t& target)
+	{
+		static_assert(sizeof(uint32_t) == 4);
+		static_assert(sizeof(char)     == 1);
+
+		struct alignas(uint32_t) { char b[sizeof(uint32_t)]; } buf;
+		data.read(buf.b, sizeof(uint32_t));
+
+		if(!LITTLE_ENDIAN_HOST())
+		{
+			char tmp;
+			for(size_t i = 0; i <= sizeof(uint32_t) / 2; ++i)
+			{
+				tmp = buf.b[sizeof(uint32_t) - i - 1];
+				buf.b[sizeof(uint32_t) - i - 1] = buf.b[0];
+				buf.b[0] = tmp;
+			}
+		}
+		std::memcpy((void*) &target, (const void*) buf.b, 4);
+
+		return data;
+	}
+
 	/* Load a texture from a stream object.
 	 * The data in the texture is expected to be laid out in the following way:
 	 *     |--------|---------------|-----------------------------------|
@@ -38,8 +96,11 @@ export namespace map
 			throw std::runtime_error(what);
 		};
 
-		if(!(data >> width))  fail();
-		if(!(data >> height)) fail();
+		if(!next_uint32_le(data, width))  fail();
+		if(!next_uint32_le(data, height)) fail();
+
+		std::cerr << u8"> texture ("_fb << width << u8", "_fb;
+		std::cerr << height << u8")"_fb << std::endl;
 
 		gfx::Plane<gfx::PixelRgba32> plane(width, height);
 		for(uint32_t i = 0; i < height; ++i)
@@ -80,14 +141,14 @@ export namespace map
 		glm::mat4 _transform;
 	public:
 		/* This type can be treated as a Mesh with no loss of information. */
-		operator gfx::Mesh<P>() const
+		gfx::Mesh<P> mesh() const
 		{
 			switch(_mode)
 			{
 			case 0:
-				return gfx::Mesh(_points, _indices, gfx::Primitive::TriangleList);
+				return gfx::Mesh<P>(_points, _indices, gfx::Primitive::TriangleList);
 			case 1:
-				return gfx::Mesh(_points, _indices, gfx::Primitive::TriangleStrip);
+				return gfx::Mesh<P>(_points, _indices, gfx::Primitive::TriangleStrip);
 			}
 
 			std::string what = u8"invalid mesh mode"_fb;
@@ -137,25 +198,28 @@ export namespace map
 				throw std::runtime_error(what);
 			};
 			
-			if(!(data >> model._mode)) fail();
-			if(!(data >> points))  fail();
-			if(!(data >> indices)) fail();
+			if(!next_uint32_le(data, model._mode)) fail();
+			if(!next_uint32_le(data, points))  fail();
+			if(!next_uint32_le(data, indices)) fail();
 
-			if(!(data >> x))     fail();
-			if(!(data >> y))     fail();
-			if(!(data >> z))     fail();
-			if(!(data >> sx))    fail();
-			if(!(data >> sy))    fail();
-			if(!(data >> sz))    fail();
-			if(!(data >> pitch)) fail();
-			if(!(data >> yaw))   fail();
-			if(!(data >> roll))  fail();
+			if(!next_float32_le(data, x))     fail();
+			if(!next_float32_le(data, y))     fail();
+			if(!next_float32_le(data, z))     fail();
+			if(!next_float32_le(data, sx))    fail();
+			if(!next_float32_le(data, sy))    fail();
+			if(!next_float32_le(data, sz))    fail();
+			if(!next_float32_le(data, pitch)) fail();
+			if(!next_float32_le(data, yaw))   fail();
+			if(!next_float32_le(data, roll))  fail();
 
 			model._transform = glm::translate(glm::vec3(x, y, z));
 			model._transform = glm::scale(model._transform, glm::vec3(sx, sy, sz));
 			model._transform = glm::rotate(pitch, glm::vec3(1.0, 0.0, 0.0));
 			model._transform = glm::rotate(yaw,   glm::vec3(0.0, 1.0, 0.0));
 			model._transform = glm::rotate(roll,  glm::vec3(0.0, 0.0, 1.0));
+
+			std::cerr << u8"> model "_fb << points << u8"p "_fb << indices;
+			std::cerr << u8"i"_fb << std::endl;
 
 			model._points.reserve(points);
 			for(uint32_t i = 0; i < points; ++i)
@@ -165,7 +229,7 @@ export namespace map
 			for(uint32_t i = 0; i < indices; ++i)
 			{
 				uint32_t index;
-				if(!(data >> index)) fail();
+				if(!next_uint32_le(data, index)) fail();
 				model._indices.push_back(index);
 			}
 
@@ -201,16 +265,16 @@ export namespace map
 				throw std::runtime_error(what);
 			};
 
-			if(!(data >> t))  fail();
-			if(!(data >> i))  fail();
-			if(!(data >> j))  fail();
-			if(!(data >> nx)) fail();
-			if(!(data >> ny)) fail();
-			if(!(data >> nz)) fail();
-			if(!(data >> x))  fail();
-			if(!(data >> y))  fail();
-			if(!(data >> z))  fail();
-			if(!(data >> w))  fail();
+			if(!next_uint32_le(data, t))   fail();
+			if(!next_float32_le(data, i))  fail();
+			if(!next_float32_le(data, j))  fail();
+			if(!next_float32_le(data, nx)) fail();
+			if(!next_float32_le(data, ny)) fail();
+			if(!next_float32_le(data, nz)) fail();
+			if(!next_float32_le(data, x))  fail();
+			if(!next_float32_le(data, y))  fail();
+			if(!next_float32_le(data, z))  fail();
+			if(!next_float32_le(data, w))  fail();
 
 			Point p;
 			p.texture_index = t;
@@ -279,21 +343,27 @@ export namespace map
 			Map map;
 			uint32_t textures, models;
 
-			auto fail = []()
+			auto fail = [&]()
 			{
-				std::string what = u8"unexpected end of stream while reading \
-					map data"_fb;
-				throw std::runtime_error(what);
+				std::stringstream what;
+				what << u8"unexpected end of stream while reading \
+					map data: "_fb;
+				what << data.rdstate();
+				throw std::runtime_error(what.str());
 			};
 
-			if(!(data >> textures)) fail();
-			if(!(data >> models))   fail();
+			if(!next_uint32_le(data, textures)) fail();
+			if(!next_uint32_le(data, models))   fail();
+
+			std::cerr << u8"map contains"_fb << std::endl;
+			std::cerr << textures << u8" textures"_fb << std::endl;
+			std::cerr << models   << u8" models"_fb   << std::endl;
 
 			map._textures.reserve(textures + 1);
 			map._models.reserve(models);
 
 			/* Initialize the null texture. */
-			map._textures.push_back(gfx::Plane<gfx::PixelRgba32>(1, 1));
+			map._textures.emplace_back(1, 1);
 			map._textures[0].at(0, 0) = gfx::PixelRgba32(0.0, 0.0, 0.0, 1.0);
 
 			/* Initialize all of the other textures. */
@@ -305,6 +375,16 @@ export namespace map
 				map._models.push_back(Model<Point>::load(data));
 
 			return map;
+		}
+
+		const std::vector<gfx::Plane<gfx::PixelRgba32>>& textures() const
+		{
+			return _textures;
+		}
+
+		const std::vector<Model<Point>>& models() const
+		{
+			return _models;
 		}
 	};
 };

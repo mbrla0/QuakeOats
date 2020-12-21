@@ -16,7 +16,7 @@ import str;			/* Haha UTF-8 go brr.				*/
 
 export namespace gfx
 {
-	/** RGBA 32 color values. */
+	/* RGBA 32 color values. */
 	struct alignas(4) PixelRgba32
 	{
 		uint8_t red;
@@ -48,6 +48,31 @@ export namespace gfx
 			this->alpha = a;
 		}
 	};
+	
+	/* Slope between two RGBA 32 color values. */
+	class PixelRgba32Slope
+	{
+	protected:
+		PixelRgba32 _a;
+		PixelRgba32 _b;
+	public:
+		/* Create a new slope between the given pixels. */
+		PixelRgba32Slope(PixelRgba32 a, PixelRgba32 b)
+			: _a(a), _b(b)
+		{ }
+
+		PixelRgba32 at(double x)
+		{
+			PixelRgba32 p;
+			p.red   = (1.0 - x) * _a.red   + x * _b.red;
+			p.green = (1.0 - x) * _a.green + x * _b.green;
+			p.blue  = (1.0 - x) * _a.blue  + x * _b.blue;
+			p.alpha = (1.0 - x) * _a.alpha + x * _b.alpha;
+			
+			return p;
+		}
+		PixelRgba32 at(float x) { return at((double) x); }
+	};
 
 	/* A plane of data points. */
 	template<typename T>
@@ -59,6 +84,9 @@ export namespace gfx
 
 		/* Color storage. */
 		T *_data;
+
+		/* Ownership of the data storage. */
+		bool _owns;
 	protected:
 		/* Checks for bounds on input X and Y coordinates, thowing a range error
 		 * in case the coordinates land somewhere outside the plane. */
@@ -90,12 +118,39 @@ export namespace gfx
 			: _width(width), _height(height)
 		{
 			this->_data = new T[width * height];
+			this->_owns = true;
 		}
 
 		~Plane()
 		{
-			delete[] this->_data;
+			if(_owns) 
+				/* We own the buffer. */
+				delete[] this->_data;
 		}	
+
+		/* Copy constructor. */
+		Plane(const Plane& source)
+		{
+			this->_width  = source._width;
+			this->_height = source._height;
+			this->_data   = new T[source._width * source._height];
+			this->_owns   = true;
+
+			std::memcpy(
+				(void*) this->_data, 
+				(const void*) source._data,
+				_width * _height * sizeof(T));
+		}
+
+		/* Move constructor. */
+		Plane(Plane&& source)
+		{
+			this->_width  = source._width;
+			this->_height = source._height;
+			this->_data   = source._data;
+			this->_owns   = true;
+			source._owns  = false;
+		}
 
 		/* Acquire a reference to a data point in the plane at the given x and y
 		 * coordinate index, not checking for boundaries. 
@@ -201,7 +256,7 @@ export namespace gfx
 	{
 	protected:
 		/* The plane whose values are to be interpolated with the slope. */
-		Plane<T>& _plane;
+		const Plane<T>& _plane;
 
 		/* The slope generation function. */
 		std::function<S(T, T)> _slope;
@@ -209,7 +264,7 @@ export namespace gfx
 		/* Create a new sampler for the given plane with the given slope 
 		 * generation function. */
 		Sampler(
-			Plane<T> &plane,
+			const Plane<T> &plane,
 			std::function<S(T, T)> slope)
 			: _plane(plane), _slope(slope)
 		{ }	
@@ -286,13 +341,16 @@ export namespace gfx
 		 */
 		std::function<P(P)> transform;
 
+		/* Given a point, project it. */
+		std::function<P(P)> project;
+
 		/* Given a point, returns a tuple with the coordinates of this point
 		 * in screen space.
 		 *
 		 * # Synchronization
 		 * Same as transform.
 		 */
-		std::function<std::tuple<uint32_t, uint32_t>(P)> screen;
+		std::function<std::tuple<int32_t, int32_t>(P)> screen;
 
 		/* Given a pair of points, create a slope that goes from one to the 
 		 * first to the second point.
@@ -301,6 +359,22 @@ export namespace gfx
 		 * Same as transform. 
 		 */
 		std::function<S(P, P)> slope;
+
+		/* Scissor rectangle used to determine the bounds of the drawing scope.
+		 * Setting this helps avoid useless pixel calculations that would happen
+		 * outside of the screen area. 
+		 *
+		 * The value returned by this function is the (Left, Right, Top Bottom)
+		 * tuple for the bounds of the clipping rectangle. */
+		std::function<std::tuple<uint32_t, uint32_t, uint32_t, uint32_t>()> scissor;
+
+		/* Clipper function for deleting off-screen geometry.
+		 *
+		 * Given three vertices of a transformed triangle, this function must 
+		 * decide on whether the triangle should be clipped (i. e. ignored)
+		 * during the render process.
+		 */
+		std::function<std::optional<std::tuple<P, P, P>>(P, P, P)> clip;
 
 		/* This function gets called at the bottom of the raster pipeline and
 		 * to it is given a position X in screen space, followed by a position 
@@ -346,11 +420,23 @@ export namespace gfx
 			b = this->transform(b);
 			c = this->transform(c);
 
+			auto clip = this->clip(a, b, c);
+			if(!clip)
+				/* Clip unnecessary geomtry. */
+				return;
+
+			a = std::get<0>(clip.value());
+			b = std::get<1>(clip.value());
+			c = std::get<2>(clip.value());
+
+			a = this->project(a);
+			b = this->project(b);
+			c = this->project(c);
+
 			auto [x0, y0, x1, y1, x2, y2] = std::tuple_cat(
 				this->screen(a),
 				this->screen(b),
 				this->screen(c));
-			
 
 			/* Sort the points primarily by increasing Y and, secondy, by increasing X. */
 			if(std::tie(y0, x0) > std::tie(y1, x1)) { std::swap(a, b); std::swap(y0, y1); std::swap(x0, x1); }
@@ -368,13 +454,16 @@ export namespace gfx
 				shortside == 1 ? this->slope(a, b) : this->slope(a, c)
 			};
 
+			/* Get the scissor. */
+			auto [left, right, top, bottom] = this->scissor();
+
 			auto ye = y1;
 			auto yt = y0;
-			for(uint32_t y = y0;; ++y)
+			for(int32_t y = std::max(y0, (int32_t) top); y <= (int32_t) bottom; ++y)
 			{
 				if(y >= ye)
 				{
-					if(ye == y2) 
+					if(ye >= y2) 
 						/* We've reached the end of the second bend. */
 						break;
 
@@ -394,8 +483,8 @@ export namespace gfx
 				if(x0 > x1) { std::swap(x0, x1); std::swap(p0, p1); }
 
 				S slope = this->slope(p0, p1);
-				for(uint32_t x = x0; x < x1; ++x)
-				{					
+				for(int32_t x = std::max(x0, (int32_t) left); x < x1 && x <= (int32_t) right; ++x)
+				{
 					double posX = (double) (x - x0) / (double) (x1 - x0);
 					auto p = slope.at(posX);
 					
@@ -404,7 +493,9 @@ export namespace gfx
 					 * modifying this one pixel value. 
 					 *
 					 * TODO: Actually implement the synchronization here. */
-					this->painter(x, y, p);
+					if(x < 0 || y < 0 || x > (int32_t) right || y > (int32_t) bottom )
+						throw std::runtime_error("invalid pixel shader invocation coordinate");
+					this->painter((uint32_t) x, (uint32_t) y, p);
 				}
 			}
 		}
@@ -505,6 +596,16 @@ export namespace gfx
 				auto what = u8"raster call missing slope creator function"_fb;
 				throw std::runtime_error(what);
 			};
+			this->scissor = []() -> std::tuple<uint32_t, uint32_t, uint32_t, uint32_t>
+			{
+				auto what = u8"raster call missing scissor function"_fb;
+				throw std::runtime_error(what);
+			};
+			this->clip = [](P, P, P) -> std::optional<std::tuple<P, P, P>>
+			{
+				auto what = u8"raster call missing clip function"_fb;
+				throw std::runtime_error(what);
+			};
 			this->painter = [](auto, auto, auto)
 			{
 				auto what = u8"raster call missing painter function"_fb;
@@ -532,18 +633,18 @@ export namespace gfx
 			 * single triangle that happens to cover the entire screen. */
 			#define TESSEL_AREA_THRESHOLD (1024 * 64)
 
-			/*uint64_t area = darea(triangle);
+			uint64_t area = darea(triangle);
 			if(area > TESSEL_AREA_THRESHOLD)
 			{
 				Triangle t0, t1;
 				bissect(triangle, t0, t1);
 			
-				if(std::max(darea(t0), darea(t1)) != area)
+				if(darea(t0) + darea(t1) <= area)
 				{
 					dispatch(t0.point0, t0.point1, t0.point2, futures);
 					dispatch(t1.point0, t1.point1, t1.point2, futures);
 				}
-			}*/
+			}
 
 			/* We're satistifed with the size of the fragment. So submit it. */
 			auto task = make_task<void>([triangle, this]() 
@@ -591,8 +692,8 @@ export namespace gfx
 		/* Create a new mesh object with the given vertex and idex data, along
 		 * with the given primitive assembler type. */
 		Mesh(
-			std::vector<P>& vertices, 
-			std::vector<size_t>& indices,
+			const std::vector<P>& vertices, 
+			const std::vector<size_t>& indices,
 			Primitive primitive)
 			: _vertices(vertices), _indices(indices), _primitive(primitive)
 		{ }

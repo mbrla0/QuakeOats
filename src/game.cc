@@ -7,6 +7,8 @@ export module game;
 
 import <concepts>;	/* For standard concepts.		*/
 import <sstream>;	/* AAAAAAAAAAAAAAAAAAAAAAAAAAA.	*/
+import <fstream>;	/* For loading the map file.	*/
+import <iostream>;	/* For debug output.			*/
 import gfx;			/* For planes and rasterizers.	*/
 import map;			/* For asset loading.			*/
 
@@ -69,11 +71,6 @@ export namespace game
 		Vertex at(float  x) const { return this->at((double) x); } 
 	};
 
-	class Player
-	{
-		
-	};
-
 	/* Input mapper read by the game. */
 	class Controller
 	{
@@ -112,6 +109,14 @@ export namespace game
 
 	};
 
+	struct Player
+	{
+		glm::vec3 position;
+		glm::vec3 velocity;
+		glm::vec3 rotation;
+		glm::vec3 scaling;
+	};
+
 	class Game
 	{
 	protected:
@@ -137,49 +142,34 @@ export namespace game
 		 * Use this rasterizer for objects that are placed in and that should be 
 		 * affected by world transformations and effects.
 		 */
-		gfx::Raster<Vertex, VertexSlope> world;
+		gfx::Raster<map::Point, map::PointSlope> world;
 
 		/* Input map. */
 		Controller _controller;	
+
+		/* World map. */
+		map::Map world_map;
+
+		/* Player variables. */
+		Player player;
 	public:
 		Game(uint32_t width, uint32_t height)
 			: screen(width, height), depth(width, height), lock(width, height)
-		{
-			/* Write our shaders. */
-			world.transform = [](Vertex vert)
-			{
-				return vert;
-			};
-			world.screen = [&](Vertex vert)
-			{ 
-				glm::vec4 point = vert.position;
-				return std::make_tuple(
-					std::round((point.x + 1.0) * (float) screen.width()  / 2.0),
-					std::round((point.y + 1.0) * (float) screen.height() / 2.0));
-			};
-			world.slope = [](Vertex a, Vertex b)
-			{
-				return VertexSlope(a, b);
-			};
-			world.painter = [&](uint32_t x, uint32_t y, Vertex p)
-			{
-				this->lock.at(x, y).lock();
+		{ 
+			/* Load the map. */
+			std::ifstream map;
+			map.open("assets/map0.map", std::ios_base::in | std::ios_base::binary);
+			if(!map)
+				throw std::runtime_error("could not open assets/map0.map");
 
-				/* Clip pixels further that what we already have. */
-				if(this->depth.at(x, y) < p.position.z)
-				{
-					this->lock.at(x, y).unlock();
-					return;	
-				}
-				this->depth.at(x, y) = p.position.z;
+			world_map = map::Map::load(map);
 
-				this->screen.at(x, y).red   = (uint8_t) (p.color.x * 255.0);
-				this->screen.at(x, y).green = (uint8_t) (p.color.y * 255.0);
-				this->screen.at(x, y).blue  = (uint8_t) (p.color.z * 255.0);
-				this->screen.at(x, y).alpha = (uint8_t) (p.color.w * 255.0);
 
-				this->lock.at(x, y).unlock();
-			};
+			projection = glm::perspective(glm::radians(90.0), 4.0 / 3.0, 1.0, 100.0);
+			player.position = glm::vec3(0.0);
+			player.velocity = glm::vec3(0.0);
+			player.rotation = glm::vec3(0.0);
+			player.scaling  = glm::vec3(1.0);
 		}
 
 		/* Reference to the controller interface for this game. */
@@ -187,8 +177,19 @@ export namespace game
 		      Controller& controller()       noexcept { return _controller; }
 
 		/* Perform one iteration of the game loop. */
-		void iterate()
+		void iterate(double delta)
 		{
+			/* Update the position of the player. */
+			static double angle = - 3.1415 / 2.0;
+			player.position.x = 0.0;
+			player.position.z = 0.0;
+			player.position.y = -10.0;
+			player.scaling = glm::vec3(1.0);
+			/*player.rotation.x = 3.1415 / 2.0;*/
+			player.rotation.y = angle;
+			angle += 3.1415 / 4.0 * delta;
+
+			/* Render the screen. */
 			Pixel white;
 			white.red   = 0x11;
 			white.green = 0x11;
@@ -198,48 +199,78 @@ export namespace game
 			screen.clear(white);
 			depth.clear(+1.0 / 0.0);
 
-			static double pos = 0.0;
-			std::vector<Vertex> vertices(5);
-			std::vector<size_t> indices(
+			glm::mat4 view = glm::mat4(1.0);
+			view = glm::rotate(view, player.rotation.x, glm::vec3(1.0, 0.0, 0.0));
+			view = glm::rotate(view, player.rotation.y, glm::vec3(0.0, 1.0, 0.0));
+			view = glm::rotate(view, player.rotation.z, glm::vec3(0.0, 0.0, 1.0));
+			view = glm::scale(view, glm::vec3(
+				1.0 / player.scaling.x,
+				1.0 / player.scaling.y,
+				1.0 / player.scaling.z));
+			view = glm::translate(view, -player.position);
+
+			for(auto& model : world_map.models())
 			{
-				0, 1, 4, 
-				1, 2, 4,
-				2, 3, 4, 
-				3, 0, 4,
-				0, 2, 3,
-				0, 1, 2,
-			});
+				auto transform = model.transformation();
+				world.transform = [&](map::Point p)
+				{
+					glm::vec4 point = this->projection * view * transform * p.position;
+					p.position = point;
 
-			vertices[0].position = glm::vec4( 1.0,  1.0,  1.0, 1.0);
-			vertices[1].position = glm::vec4(-1.0,  1.0,  1.0, 1.0);
-			vertices[2].position = glm::vec4(-1.0,  1.0, -1.0, 1.0);
-			vertices[3].position = glm::vec4( 1.0,  1.0, -1.0, 1.0);
-			vertices[4].position = glm::vec4( 0.0, -1.0,  0.0, 1.0);
+					return p;
+				};
+				world.clip = [&](map::Point a, map::Point b, map::Point c)
+				{
+					
+				};
+				world.project = [&](map::Point p)
+				{
+					if(p.position.w <= 0.1) p.position.w = 0.1;
 
-			vertices[0].color = glm::vec4(0.0, 1.0, 1.0, 1.0);
-			vertices[1].color = glm::vec4(0.0, 0.0, 1.0, 1.0);
-			vertices[2].color = glm::vec4(1.0, 0.0, 1.0, 1.0);
-			vertices[3].color = glm::vec4(0.0, 1.0, 0.0, 1.0);
-			vertices[4].color = glm::vec4(1.0, 1.0, 1.0, 1.0);
+					p.position /= p.position.w;
+					return p;
+				};
+				world.screen = [&](map::Point p)
+				{
+					int32_t x = std::round((p.position.x + 1.0) * (double) screen.width()  / 2.0);
+					int32_t y = std::round((p.position.y + 1.0) * (double) screen.height() / 2.0);
+					
+					return std::make_tuple(x, y);
+				};
+				world.scissor = [&]()
+				{
+					/* Cut off-screen pixels. */
+					return std::make_tuple(
+						0, screen.width(),
+						0, screen.height());
+				};
+				world.slope = [&](map::Point a, map::Point b)
+				{
+					return map::PointSlope(a, b);
+				};
+				world.painter = [&](uint32_t x, uint32_t y, map::Point p)
+				{
+					auto sampler = gfx::Sampler<gfx::PixelRgba32, gfx::PixelRgba32Slope>(
+						world_map.textures().at(p.texture_index),
+						[](gfx::PixelRgba32 a, gfx::PixelRgba32 b) {
+							return gfx::PixelRgba32Slope(a, b);
+						});
 
-			pos += 0.04;
-			double a = pos;
+					lock.at(x, y).lock();
+					if(depth.at(x, y) < p.position.z)
+					{
+						lock.at(x, y).unlock();
+						return;
+					}
+					depth.at(x, y) = p.position.z;
+					screen.at(x, y) = sampler.at(p.sampler.x, p.sampler.y);
 
-			gfx::Mesh mesh(vertices, indices, gfx::Primitive::TriangleList);
+					lock.at(x, y).unlock();
+				};
 
-			this->world.transform = [a](Vertex v)
-			{
-				glm::mat4 t, p;
-				t = glm::translate(glm::vec3(0.0, 0.0, -5.0));
-				t = glm::rotate(t, glm::radians((float) a * 20), glm::vec3(0.0, 1.0, 0.0));
-				p = glm::perspective(glm::radians(90.0), 4.0 / 3.0, 0.1, 100.0);
-
-				v.position  = p * t * v.position;
-				v.position /= v.position.w;
-				return v;
-
-			};
-			mesh.draw(this->world);
+				auto mesh = model.mesh();
+				mesh.draw(world);
+			}
 		}
 
 		constexpr bool exit() const

@@ -28,8 +28,11 @@ int main(void)
 	 * been completed. */
 	game::Game game(WIDTH, HEIGHT);
 
+	using Clock    = std::chrono::steady_clock;
+	using Duration = std::chrono::duration<double, std::ratio<1>>;
+	auto last_time = Clock::now();
 
-	/* Initialize the game. */
+	/* Run the game. */
 	while(!game.exit())
 	{
 		static int32_t mouse_x = 0, mouse_y = 0;
@@ -89,7 +92,12 @@ int main(void)
 			}
 			
 		}
-		game.iterate();
+
+		auto now = Clock::now();
+		auto delta = std::chrono::duration_cast<Duration>(last_time - now).count();
+		last_time = now;
+
+		game.iterate(delta);
 
 		sf::Image image;
 		image.create(WIDTH, HEIGHT, (sf::Uint8*) game.get_screen().data());
