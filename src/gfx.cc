@@ -422,8 +422,8 @@ export namespace gfx
 				{
 					Triangle t;
 					t.point0 = i;
-					t.point0 = j;
-					t.point0 = k;
+					t.point1 = j;
+					t.point2 = k;
 					this->rasterize(t);
 				});
 		}
