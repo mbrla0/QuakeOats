@@ -304,6 +304,8 @@ export namespace map
 			t.sampler  = glm::mix(_a.sampler,  _b.sampler,  x);
 			t.normal   = glm::mix(_a.normal,   _b.normal,   x);
 			t.position = glm::mix(_a.position, _b.position, x);
+
+
 			return t;
 		}
 		Point at(float x) { return at((double) x); }

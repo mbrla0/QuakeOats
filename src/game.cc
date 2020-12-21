@@ -159,14 +159,14 @@ export namespace game
 		{ 
 			/* Load the map. */
 			std::ifstream map;
-			map.open("assets/cube.map", std::ios_base::in | std::ios_base::binary);
+			map.open("assets/map0.map", std::ios_base::in | std::ios_base::binary);
 			if(!map)
 				throw std::runtime_error("could not open assets/map0.map");
 
 			world_map = map::Map::load(map);
 
 
-			projection = glm::perspective(glm::radians(90.0), 4.0 / 3.0, 1.0, 100.0);
+			projection = glm::perspective(glm::radians(45.0), 4.0 / 3.0, 2.0, 100.0);
 			player.position = glm::vec3(0.0);
 			player.velocity = glm::vec3(0.0);
 			player.rotation = glm::vec3(0.0);
@@ -181,14 +181,24 @@ export namespace game
 		void iterate(double delta)
 		{
 			/* Update the position of the player. */
-			static double angle = - 3.1415 / 2.0;
-			player.position.x = 0.0;
-			player.position.z = 0.0;
-			player.position.y = 0.0;
+			static double angle = 3.1415 / 2.0;
 			player.scaling = glm::vec3(1.0);
-			/*player.rotation.x = 3.1415 / 2.0;*/
-			player.rotation.y = angle;
-			angle += 3.1415 / 4.0 * delta;
+
+			if(_controller.left())
+				angle += 3.1415 / 4.0 * delta;
+			if(_controller.right())
+				angle -= 3.1415 / 4.0 * delta;
+
+			player.velocity.x = std::cos(angle);
+			player.velocity.y = 0;
+			player.velocity.z = std::sin(angle);
+			player.rotation.y = angle + 3.1415 / 2.0;
+
+			if(_controller.forward())
+				player.position += (float) delta * player.velocity;
+			if(_controller.backward())
+				player.position -= (float) delta * player.velocity;
+			player.position.y = 2.0;	
 
 			/* Render the screen. */
 			Pixel white;
@@ -205,17 +215,53 @@ export namespace game
 			view = glm::rotate(view, player.rotation.y, glm::vec3(0.0, 1.0, 0.0));
 			view = glm::rotate(view, player.rotation.z, glm::vec3(0.0, 0.0, 1.0));
 			view = glm::scale(view, glm::vec3(
-				1.0 / player.scaling.x,
-				1.0 / player.scaling.y,
-				1.0 / player.scaling.z));
+				 1.0 / player.scaling.x,
+				-1.0 / player.scaling.y,
+				 1.0 / player.scaling.z));
 			view = glm::translate(view, -player.position);
+
+			struct model
+			{
+				gfx::Mesh<map::Point> mesh()
+				{
+					static map::Point p0, p1, p2;
+					p0.position = glm::vec4(-1.0, -1.0, 1.0, 1.0);
+					p1.position = glm::vec4( 1.0, -1.0, 1.0, 1.0);
+					p2.position = glm::vec4( 0.0,  1.0, 1.0, 1.0);
+
+					p0.sampler = glm::vec2(0.0, 0.0);
+					p1.sampler = glm::vec2(1.0, 0.0);
+					p2.sampler = glm::vec2(0.5, 1.0);
+
+					p0.texture_index = 1;
+					p1.texture_index = 1;
+					p2.texture_index = 1;
+
+					static std::vector<map::Point> points(3);
+					points[0] = p0;
+					points[1] = p1;
+					points[2] = p2;
+
+					static std::vector<size_t> indices(3);
+					indices[0] = 0;
+					indices[1] = 1;
+					indices[2] = 2;
+
+					return gfx::Mesh(points, indices);
+				}
+				glm::mat4 transformation()
+				{
+					return glm::mat4(1.0);
+				}
+			};
+			std::vector<model> models(1);
 
 			for(auto& model : world_map.models())
 			{
 				auto transform = model.transformation();
 				world.transform = [&](map::Point p)
 				{
-					glm::vec4 point = this->projection * view * transform * p.position;
+					glm::vec4 point = view * transform * p.position;
 					p.position = point;
 
 					return p;
@@ -261,12 +307,23 @@ export namespace game
 					uint32_t trigs = 0;
 					map::Point points[4];
 
-					auto p_lncross = [&](map::Point a, map::Point b) -> std::optional<map::Point>
+					auto p_add = [&](map::Point a)
+					{
+						if(trigs >= 4)
+						{
+							std::cerr << u8"more than three points in triangle crossing"_fb;
+							std::cerr << std::endl;
+							return;
+						}
+						points[trigs++] = a;
+					};
+
+					auto p_lncross_test = [&](map::Point a, map::Point b)
 					{
 						std::optional<glm::vec3> ocross = lncross(
 							a.position.xyz(), 
 							b.position.xyz());
-						if(!ocross) return {};
+						if(!ocross) return;
 						
 						glm::vec3 cross = ocross.value();
 						float midf = lenrat(
@@ -277,48 +334,57 @@ export namespace game
 						map::PointSlope slope(a, b);
 						map::Point mid = slope.at(midf);
 
-						return mid;
+						/* Passed the test. */
+						p_add(mid);
 					};
 					
 					auto test = [&](map::Point p)
 					{
-						if(ndot(p.position.xyz()) > 0.0) 
+						if(ndot(p.position.xyz()) >= -0.0) 
 						{
-							if(trigs >= 4)
-								throw std::runtime_error(u8"more than three points in triangle crossing"_fb);
-							points[trigs++] = p;
+							p_add(p);
 						}
 					};
 				
-					std::optional<map::Point> cross;
 					test(a);
-					if((cross = p_lncross(a, b))) test(cross.value());
+					p_lncross_test(a, b);
 					test(b);
-					if((cross = p_lncross(b, c))) test(cross.value());
+					p_lncross_test(b, c);
 					test(c);
-					if((cross = p_lncross(c, a))) test(cross.value());
+					p_lncross_test(c, a);
 
 					if(trigs == 3)
+					{
 						dispatch(points[0], points[1], points[2]);
+					}
 					else if(trigs == 4)
 					{
 						dispatch(points[0], points[1], points[2]);
-						dispatch(points[1], points[2], points[3]);
+						dispatch(points[0], points[2], points[3]);
+					}
+					else if(trigs != 0)
+					{
+						std::cerr << u8"only valid trig values are 0, 3 and 4"_fb;
+						std::cerr << std::endl;
 					}
 
 				};
 				world.project = [&](map::Point p)
 				{
-					if(p.position.w <= 0.1) p.position.w = 0.1;
+					float z = p.position.z;
 
+					p.position = this->projection * p.position;
 					p.position /= p.position.w;
+					p.position.z = z;
+
 					return p;
 				};
 				world.screen = [&](map::Point p)
 				{
 					int32_t x = std::round((p.position.x + 1.0) * (double) screen.width()  / 2.0);
 					int32_t y = std::round((p.position.y + 1.0) * (double) screen.height() / 2.0);
-					
+					y = (int32_t) screen.height() - y;
+
 					return std::make_tuple(x, y);
 				};
 				world.scissor = [&]()
@@ -340,6 +406,9 @@ export namespace game
 							return gfx::PixelRgba32Slope(a, b);
 						});
 
+					if(x < 0 || x >= screen.width()) return;
+					if(y < 0 || y >= screen.height()) return;
+
 					lock.at(x, y).lock();
 					if(depth.at(x, y) < p.position.z)
 					{
@@ -348,6 +417,10 @@ export namespace game
 					}
 					depth.at(x, y) = p.position.z;
 					screen.at(x, y) = sampler.at(p.sampler.x, p.sampler.y);
+
+					screen.at(x, y).red   /= std::max(p.position.z / 5.0f, 1.0f);
+					screen.at(x, y).green /= std::max(p.position.z / 5.0f, 1.0f);
+					screen.at(x, y).blue  /= std::max(p.position.z / 5.0f, 1.0f);
 
 					lock.at(x, y).unlock();
 				};

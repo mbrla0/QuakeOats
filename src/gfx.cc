@@ -366,7 +366,7 @@ export namespace gfx
 		 *
 		 * The value returned by this function is the (Left, Right, Top Bottom)
 		 * tuple for the bounds of the clipping rectangle. */
-		std::function<std::tuple<uint32_t, uint32_t, uint32_t, uint32_t>()> scissor;
+		std::function<std::tuple<int32_t, int32_t, int32_t, int32_t>()> scissor;
 
 		/* Tesselation function.
 		 * This function is responsible for generating a number of output triangles 
@@ -446,6 +446,7 @@ export namespace gfx
 				this->screen(b),
 				this->screen(c));
 
+
 			/* Sort the points primarily by increasing Y and, secondy, by increasing X. */
 			if(std::tie(y0, x0) > std::tie(y1, x1)) { std::swap(a, b); std::swap(y0, y1); std::swap(x0, x1); }
 			if(std::tie(y1, x1) > std::tie(y2, x2)) { std::swap(b, c); std::swap(y1, y2); std::swap(x1, x2); }
@@ -467,11 +468,11 @@ export namespace gfx
 
 			auto ye = y1;
 			auto yt = y0;
-			for(int32_t y = std::max(y0, (int32_t) top); y <= (int32_t) bottom; ++y)
+			for(int32_t y = std::max(y0, top); y <= bottom; ++y)
 			{
 				if(y >= ye)
 				{
-					if(ye >= y2) 
+					if(y >= y2 || ye == y2) 
 						/* We've reached the end of the second bend. */
 						break;
 
@@ -491,7 +492,7 @@ export namespace gfx
 				if(x0 > x1) { std::swap(x0, x1); std::swap(p0, p1); }
 
 				S slope = this->slope(p0, p1);
-				for(int32_t x = std::max(x0, (int32_t) left); x < x1 && x <= (int32_t) right; ++x)
+				for(int32_t x = std::max(x0, left); x < x1 && x <= right; ++x)
 				{
 					double posX = (double) (x - x0) / (double) (x1 - x0);
 					auto p = slope.at(posX);
@@ -501,8 +502,8 @@ export namespace gfx
 					 * modifying this one pixel value. 
 					 *
 					 * TODO: Actually implement the synchronization here. */
-					if(x < 0 || y < 0 || x > (int32_t) right || y > (int32_t) bottom )
-						throw std::runtime_error("invalid pixel shader invocation coordinate");
+					/*if(x < 0 || y < 0 || x > (int32_t) right || y > (int32_t) bottom )
+						throw std::runtime_error("invalid pixel shader invocation coordinate");*/
 					this->painter((uint32_t) x, (uint32_t) y, p);
 				}
 			}
@@ -624,7 +625,7 @@ export namespace gfx
 		/* Dispatches the rendering of a triangle, given the coordinates for its
 		 * three vertices. This function returns a future that will be complete
 		 * when the triangle has been completely drawn. */
-		void dispatch(P p0, P p1, P p2, std::vector<std::future<void>>& futures)
+		void dispatch(P p0, P p1, P p2, std::vector<std::future<void>>& futures, size_t /*tessels*/ = 0)
 		{
 			/* Build the triangle structure. */
 			Triangle triangle = 
@@ -639,20 +640,18 @@ export namespace gfx
 			 * We first perform a tesselation step on the triangle such that no
 			 * CPU core ever has too much work on its hands trying to render a 
 			 * single triangle that happens to cover the entire screen. */
-			#define TESSEL_AREA_THRESHOLD (1024 * 64)
+			#define TESSEL_AREA_THRESHOLD (1024 * 128)
+			#define TESSEL_MAX (4)
 
-			uint64_t area = darea(triangle);
-			if(area > TESSEL_AREA_THRESHOLD)
+			/*uint64_t area = darea(triangle);
+			if(area > TESSEL_AREA_THRESHOLD && tessels < TESSEL_MAX)
 			{
 				Triangle t0, t1;
 				bissect(triangle, t0, t1);
 			
-				if(darea(t0) + darea(t1) <= area)
-				{
-					dispatch(t0.point0, t0.point1, t0.point2, futures);
-					dispatch(t1.point0, t1.point1, t1.point2, futures);
-				}
-			}
+				dispatch(t0.point0, t0.point1, t0.point2, futures, TESSEL_MAX + 1);
+				dispatch(t1.point0, t1.point1, t1.point2, futures, TESSEL_MAX + 1);
+			}*/
 
 			/* We're satistifed with the size of the fragment. So submit it. */
 			auto task = make_task<void>([triangle, this]() 
