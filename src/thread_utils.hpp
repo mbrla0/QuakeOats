@@ -14,42 +14,6 @@
 #include <thread>               //std::thread
 #include <vector>               //std::vector
 
-class semaphore {
-private:
-    std::uint32_t permits;
-    std::mutex lock;
-    std::condition_variable cond;
-
-    //prevent copying
-    semaphore(const semaphore&) = delete;
-    semaphore& operator=(const semaphore&) = delete;
-public:
-    semaphore(std::uint32_t initial_permits): permits(initial_permits) {}
-
-    void acquire() noexcept {
-        std::unique_lock<std::mutex> l(lock);
-        while(permits == 0) {
-            cond.wait(l);
-        }
-        permits--;
-    }
-
-    void release() noexcept {
-        std::lock_guard<std::mutex> l(lock);
-        permits++;
-        cond.notify_one();
-    }
-
-    bool try_acquire() noexcept {
-        std::lock_guard<std::mutex> l(lock);
-        if(permits > 0) {
-            permits--;
-            return true;
-        }
-        return false;
-    }
-};
-
 template<typename T>
 class work_queue {
 private:
@@ -164,14 +128,6 @@ private:
             local_tasks.pop_front();
             return t;
         }
-        //TODO: add work stealing
-        /*WorkerTask task;
-        if(external_tasks.try_dequeue(task)) {
-            return task;
-        }
-        if(owner->try_steal(id, task)) {
-            return task;
-        }*/
         return external_tasks.dequeue();
     }
 
@@ -209,13 +165,6 @@ private:
         return id;
     }
 
-    /*bool try_steal_task(std::uint32_t worker, WorkerTask& ref) {
-        for(std::uint32_t i = 0; i < worker_count; i++) {
-            if(i == worker) continue;
-            if(workers[i]->external_tasks.try_steal(ref)) return true;
-        }
-        return false;
-    }*/
 public:
     explicit thread_pool(std::uint32_t size): worker_count(size) {
         next_worker.store(0);

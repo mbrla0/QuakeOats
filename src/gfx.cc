@@ -499,9 +499,7 @@ export namespace gfx
 					
 					/* In order for this operation to be safe, it has to be 
 					 * guaranteed that no other triangle operation is currently
-					 * modifying this one pixel value. 
-					 *
-					 * TODO: Actually implement the synchronization here. */
+					 * modifying this one pixel value. */ 
 					/*if(x < 0 || y < 0 || x > (int32_t) right || y > (int32_t) bottom )
 						throw std::runtime_error("invalid pixel shader invocation coordinate");*/
 					this->painter((uint32_t) x, (uint32_t) y, p);

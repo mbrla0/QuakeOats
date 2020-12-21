@@ -18,7 +18,7 @@ export namespace game
 	/* Use 32-bit RGBA as our pixel format. */
 	using Pixel = gfx::PixelRgba32;	
 
-	/* A linerly interpolating slope compatible with gfx::Slope. */
+	/* A linearly interpolating slope compatible with gfx::Slope. */
 	template<typename T>
 		requires
 		requires(T a, T b, float x) { { glm::mix(a, b, x) } -> std::same_as<T>; }
@@ -208,6 +208,7 @@ export namespace game
 			white.alpha = 0xff;
 
 			screen.clear(white);
+            /* (+1.0 / 0.0) yields +Infinity, such that n < depth == true for any n */
 			depth.clear(+1.0 / 0.0);
 
 			glm::mat4 view = glm::mat4(1.0);
@@ -219,42 +220,6 @@ export namespace game
 				-1.0 / player.scaling.y,
 				 1.0 / player.scaling.z));
 			view = glm::translate(view, -player.position);
-
-			struct model
-			{
-				gfx::Mesh<map::Point> mesh()
-				{
-					static map::Point p0, p1, p2;
-					p0.position = glm::vec4(-1.0, -1.0, 1.0, 1.0);
-					p1.position = glm::vec4( 1.0, -1.0, 1.0, 1.0);
-					p2.position = glm::vec4( 0.0,  1.0, 1.0, 1.0);
-
-					p0.sampler = glm::vec2(0.0, 0.0);
-					p1.sampler = glm::vec2(1.0, 0.0);
-					p2.sampler = glm::vec2(0.5, 1.0);
-
-					p0.texture_index = 1;
-					p1.texture_index = 1;
-					p2.texture_index = 1;
-
-					static std::vector<map::Point> points(3);
-					points[0] = p0;
-					points[1] = p1;
-					points[2] = p2;
-
-					static std::vector<size_t> indices(3);
-					indices[0] = 0;
-					indices[1] = 1;
-					indices[2] = 2;
-
-					return gfx::Mesh(points, indices);
-				}
-				glm::mat4 transformation()
-				{
-					return glm::mat4(1.0);
-				}
-			};
-			std::vector<model> models(1);
 
 			for(auto& model : world_map.models())
 			{
