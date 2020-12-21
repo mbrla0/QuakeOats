@@ -80,7 +80,7 @@ export namespace game
 		int32_t mx, my;
 
 		/* Forward, backward, left and right. */
-		bool fwd, bkw, lft, rht;
+		bool fwd {}, bkw {} , lft {}, rht {};
 
 		/* Fire and chrouch. */
 		bool fre, cch;

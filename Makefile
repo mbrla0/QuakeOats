@@ -1,10 +1,10 @@
 CXX=clang++
 CXXFLAGS=-std=c++2a -stdlib=libc++ -fimplicit-modules -fimplicit-module-maps \
-	-fprebuilt-module-path=src/ -fsanitize=address -Wall -Wextra -pedantic   \
+	-fprebuilt-module-path=src/ -Wall -Wextra -pedantic   \
    	-O2 -g -DGLM_SWIZZLE
 
 LD=clang++
-LFLAGS=-fsanitize=address -O2 -g
+LFLAGS=-O2 -g
 
 # I
 # FUCKING
