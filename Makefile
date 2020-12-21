@@ -36,9 +36,12 @@ assets/cube.map: assets/cube.json assets/grass.png assets/cube.obj assets/cube.m
 assets/map0.map: assets/map0.json assets/arena.png assets/arena.obj assets/arena.mtl
 	tools/map $< || { rm -rf $@; exit 1; }
 
-.PHONY: clean
+.PHONY: clean all docker
 clean:
 	rm -rf QuakeOats $(ASST)
 	find src/    -type f -name "*.o"   -exec rm -rf {} \+
 	find src/    -type f -name "*.pcm" -exec rm -rf {} \+
+all: QuakeOats
 
+docker: clean
+	docker build -t quakeoats .
