@@ -1,6 +1,7 @@
 CXX=clang++
 CXXFLAGS=-std=c++2a -stdlib=libc++ -fimplicit-modules -fimplicit-module-maps \
-	-fprebuilt-module-path=src/ -fsanitize=address -Wall -Wextra -pedantic -O2 -g
+	-fprebuilt-module-path=src/ -fsanitize=address -Wall -Wextra -pedantic   \
+   	-O2 -g -DGLM_SWIZZLE
 
 LD=clang++
 LFLAGS=-fsanitize=address -O2 -g

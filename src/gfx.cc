@@ -416,7 +416,7 @@ export namespace gfx
 			b = this->transform(b);
 			c = this->transform(c);
 
-			this->clip(
+			this->tesselation(
 				a, b, c,
 				[&](P i, P j, P k)
 				{
@@ -609,7 +609,7 @@ export namespace gfx
 				auto what = u8"raster call missing scissor function"_fb;
 				throw std::runtime_error(what);
 			};
-			this->clip = [](P, P, P) -> std::optional<std::tuple<P, P, P>>
+			this->tesselation = [](P, P, P, std::function<void(P, P, P)>) -> void
 			{
 				auto what = u8"raster call missing clip function"_fb;
 				throw std::runtime_error(what);

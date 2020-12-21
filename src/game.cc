@@ -11,6 +11,7 @@ import <fstream>;	/* For loading the map file.	*/
 import <iostream>;	/* For debug output.			*/
 import gfx;			/* For planes and rasterizers.	*/
 import map;			/* For asset loading.			*/
+import str;
 
 export namespace game
 {
@@ -223,7 +224,7 @@ export namespace game
 					map::Point a, 
 					map::Point b, 
 					map::Point c, 
-					std::function<map::Point, map::Point, map::Point> dispatch)
+					std::function<void(map::Point, map::Point, map::Point)> dispatch)
 				{
 					glm::vec3 q(0.0, 0.0, 1.0);
 					glm::vec3 n(0.0, 0.0, 1.0);
@@ -263,25 +264,25 @@ export namespace game
 					auto p_lncross = [&](map::Point a, map::Point b) -> std::optional<map::Point>
 					{
 						std::optional<glm::vec3> ocross = lncross(
-							a.position.xyz, 
-							b.position.xyz);
+							a.position.xyz(), 
+							b.position.xyz());
 						if(!ocross) return {};
 						
 						glm::vec3 cross = ocross.value();
-						float mid = lenrat(
-							a.position.xyz,
+						float midf = lenrat(
+							a.position.xyz(),
 							cross,
-							b.position.xyz);
+							b.position.xyz());
 
 						map::PointSlope slope(a, b);
-						map::Point mid = slope.at(mid);
+						map::Point mid = slope.at(midf);
 
 						return mid;
 					};
 					
 					auto test = [&](map::Point p)
 					{
-						if(!std::signbit(ndot(p.position.xyz))) 
+						if(!std::signbit(ndot(p.position.xyz()))) 
 						{
 							if(trigs >= 4)
 								throw std::runtime_error(u8"more than three points in triangle crossing"_fb);
@@ -291,11 +292,11 @@ export namespace game
 				
 					std::optional<map::Point> cross;
 					test(a);
-					if((cross = p_lncross(a, b)) test(cross.value());
+					if((cross = p_lncross(a, b))) test(cross.value());
 					test(b);
-					if((cross = p_lncross(b, c)) test(cross.value());
+					if((cross = p_lncross(b, c))) test(cross.value());
 					test(c);
-					if((cross = p_lncross(c, a)) test(cross.value());
+					if((cross = p_lncross(c, a))) test(cross.value());
 
 					if(trigs == 3)
 						dispatch(points[0], points[1], points[2]);
