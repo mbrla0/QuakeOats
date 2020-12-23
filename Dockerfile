@@ -25,6 +25,6 @@ RUN wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
 RUN printf "\ndeb http://apt.llvm.org/focal/ llvm-toolchain-focal main\n" >> /etc/apt/sources.list
 RUN apt update && apt install -y --no-install-recommends libc++-12-dev libc++abi-12-dev
 COPY --from=builder /build/QuakeOats/QuakeOats /QuakeOats/
-COPY --from=builder /build/QuakeOats/assets /QuakeOats/
+COPY --from=builder /build/QuakeOats/assets /QuakeOats/assets
 
 CMD ["./QuakeOats"]

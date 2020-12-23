@@ -37,4 +37,4 @@ clean:
 all: QuakeOats
 
 docker: clean
-	docker build -t quakeoats .
+	docker build --no-cache -t quakeoats .
