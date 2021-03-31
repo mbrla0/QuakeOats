@@ -4,7 +4,7 @@
 ### Subject: SCC0104 - Operating Systems I      ###
 ### Authors:                                    ###
 ###     - Matheus Branco Borella  (11218897)    ###
-###     - Natan ***REMOVED*** (***REMOVED***)    ###
+###     - Natan ***REMOVED*** (***REMOVED***)   ###
 ### Semester: Second semester of 2020           ###
 ###################################################
 
